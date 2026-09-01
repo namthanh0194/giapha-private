@@ -1,6 +1,6 @@
 ---
 version: alpha
-name: GiaPha-OS
+name: GiaPha-ABC
 description: A modern, elegant, and secure open-source family tree platform designed for Vietnamese families to preserve their lineage and heritage.
 colors:
   primary: '#1c1917'
@@ -103,11 +103,11 @@ components:
     padding: 32px
 ---
 
-# GiaPha-OS design system
+# GiaPha-ABC design system
 
 ## Overview
 
-GiaPha-OS is a modern and secure open-source family tree platform for Vietnamese families to preserve, trace, and pass down lineage, history, and cultural traditions. The interface balances professional clarity with visual indicators of respect and tradition.
+GiaPha-ABC is a modern and secure open-source family tree platform for Vietnamese families to preserve, trace, and pass down lineage, history, and cultural traditions. The interface balances professional clarity with visual indicators of respect and tradition.
 
 The visual language uses warm limestone backgrounds, crisp typography, restrained amber accents, and clear grouping. Every screen should feel calm, legible, and easy to scan.
 

@@ -3,7 +3,7 @@ import GalleryClient from '@/components/GalleryClient'
 import { getGalleryStoragePath } from '@/utils/supabase/storage-path'
 
 export const metadata = {
-  title: 'Phòng trưng bày | Gia Phả OS',
+  title: 'Phòng trưng bày | Gia Phả ABC',
   description: 'Lưu giữ và chia sẻ hình ảnh, kỷ niệm dòng họ'
 }
 
