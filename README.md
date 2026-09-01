@@ -13,6 +13,7 @@ Phù hợp với người Việt Nam.
 ## Mục lục
 
 - [Các tính năng chính](#các-tính-năng-chính)
+- [Tech Stack](#tech-stack)
 - [Demo](#demo)
 - [Hình ảnh Giao diện](#hình-ảnh-giao-diện)
 - [Cài đặt và Chạy dự án](#cài-đặt-và-chạy-dự-án)
@@ -35,6 +36,15 @@ Phù hợp với người Việt Nam.
 - **Sao lưu dữ liệu**: Xuất/nhập file JSON, CSV, GEDCOM để lưu trữ hoặc di chuyển dễ dàng.
 - **Bảo mật**: Phân quyền (Admin, Editor, Member) và bảo vệ dữ liệu bằng Supabase.
 - **Đa thiết bị**: Giao diện hiện đại, tối ưu cho cả máy tính và điện thoại.
+
+## Tech Stack
+
+- **Frontend / Core:** [Next.js 16](https://nextjs.org/) (App Router, Turbopack), [React 19](https://react.dev/), [TypeScript 5](https://www.typescriptlang.org/)
+- **Styling & UI:** [Tailwind CSS 4](https://tailwindcss.com/), [Framer Motion](https://www.framer.com/motion/), [Lucide React](https://lucide.dev/)
+- **Backend & Database:** [Supabase](https://supabase.com/) (PostgreSQL, Supabase Auth, Storage, Row Level Security), [postgres.js](https://github.com/porsager/postgres)
+- **Trực quan hóa & xử lý dữ liệu:** [D3.js](https://d3js.org/) (sơ đồ cây, mindmap), [PapaParse](https://www.papaparse.com/) (CSV), [Day.js](https://day.js.org/), [Lunar JavaScript](https://github.com/6tail/lunar-javascript) (âm lịch)
+- **Xuất dữ liệu & file:** [html-to-image](https://github.com/bubkoo/html-to-image), [jsPDF](https://github.com/parallax/jsPDF), [JSZip](https://stuk.github.io/jszip/)
+- **Runtime & Tooling:** [Bun](https://bun.sh/), [ESLint 9](https://eslint.org/), [Prettier](https://prettier.io/), Docker, Vercel
 
 ## Demo
 
