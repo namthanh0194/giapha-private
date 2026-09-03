@@ -26,6 +26,7 @@ export interface FamilyEvent {
 
 export interface CustomEventRecord {
   id: string
+  version: number
   name: string
   content: string | null
   event_date: string

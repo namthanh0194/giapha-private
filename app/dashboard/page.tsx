@@ -53,7 +53,7 @@ export default async function DashboardLaunchpad() {
 
   const { data: customEvents } = await supabase
     .from('custom_events')
-    .select('id, name, content, event_date, location, created_by')
+    .select('id, version, name, content, event_date, location, created_by')
 
   const allEvents = computeEvents(persons ?? [], customEvents ?? [])
   const upcomingEvents = allEvents.filter(

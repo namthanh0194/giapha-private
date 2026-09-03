@@ -4,7 +4,9 @@ import { useMemberListView } from '@/context/MemberListContext'
 import MemberList from '@/components/MemberList'
 import RootSelector from '@/components/RootSelector'
 import { Person, Relationship } from '@/types'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createClient } from '@/utils/supabase/client'
+import { fetchFamilySubtree, mergeGraphDelta } from '@/utils/supabase/family-graph'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 
@@ -28,26 +30,46 @@ const BubbleMapTree = dynamic(
 
 interface MembersViewsProps {
   persons: Person[]
+  listPersons?: Person[]
   relationships: Relationship[]
+  initialGraphTruncated?: boolean
+  initialGraphDepth?: number
   canEdit?: boolean
+  listPagination?: {
+    page: number
+    pageSize: number
+    total: number
+    query: string
+    filter: string
+    sort: string
+  }
 }
 
 export default function MembersViews({
   persons,
+  listPersons = persons,
   relationships,
-  canEdit = false
+  initialGraphTruncated = false,
+  initialGraphDepth = 3,
+  canEdit = false,
+  listPagination
 }: MembersViewsProps) {
   const { view: currentView, rootId, setRootId } = useMemberListView()
+  const [graphPersons, setGraphPersons] = useState(persons)
+  const [graphRelationships, setGraphRelationships] = useState(relationships)
+  const [graphDepth, setGraphDepth] = useState(initialGraphDepth)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [isTruncated, setIsTruncated] = useState(initialGraphTruncated)
   const searchParams = useSearchParams()
   const hasRestored = useRef(false)
 
   // Prepare map and roots for tree views
   const { personsMap, roots, defaultRootId } = useMemo(() => {
     const pMap = new Map<string, Person>()
-    persons.forEach((p) => pMap.set(p.id, p))
+    graphPersons.forEach((p) => pMap.set(p.id, p))
 
     const childIds = new Set(
-      relationships
+      graphRelationships
         .filter(
           (r) => r.type === 'biological_child' || r.type === 'adopted_child'
         )
@@ -58,7 +80,7 @@ export default function MembersViews({
 
     // If no rootId is provided, fallback to generation 1 or earliest birth year
     if (!finalRootId || !pMap.has(finalRootId)) {
-      const rootsFallback = persons.filter((p) => !childIds.has(p.id))
+      const rootsFallback = graphPersons.filter((p) => !childIds.has(p.id))
       if (rootsFallback.length > 0) {
         const gen1 = rootsFallback.filter((p) => p.generation === 1)
         const sortByBirthYear = (a: Person, b: Person) => {
@@ -72,8 +94,8 @@ export default function MembersViews({
         } else {
           finalRootId = rootsFallback.sort(sortByBirthYear)[0].id
         }
-      } else if (persons.length > 0) {
-        finalRootId = persons[0].id // ultimate fallback
+      } else if (graphPersons.length > 0) {
+        finalRootId = graphPersons[0].id // ultimate fallback
       }
     }
 
@@ -87,9 +109,28 @@ export default function MembersViews({
       roots: calculatedRoots,
       defaultRootId: finalRootId
     }
-  }, [persons, relationships, rootId])
+  }, [graphPersons, graphRelationships, rootId])
 
   const activeRootId = rootId || defaultRootId
+
+  const loadMore = async () => {
+    if (!activeRootId || isLoadingMore || graphDepth >= 10) return
+    setIsLoadingMore(true)
+    try {
+      const delta = await fetchFamilySubtree(createClient(), {
+        rootId: activeRootId,
+        maxDepth: graphDepth + 1,
+        includeSpouses: true
+      })
+      const merged = mergeGraphDelta(new Map(graphPersons.map((person) => [person.id, person])), graphRelationships, delta)
+      setGraphPersons([...merged.personsMap.values()])
+      setGraphRelationships(merged.relationships)
+      setGraphDepth(delta.maxDepth)
+      setIsTruncated(delta.truncated)
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
 
   // Khôi phục lựa chọn từ localStorage
   useEffect(() => {
@@ -144,9 +185,15 @@ export default function MembersViews({
         {currentView === 'list' && (
           <div className='relative z-10 mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8'>
             <MemberList
-              initialPersons={persons}
+              key={
+                listPagination
+                  ? `${listPagination.page}:${listPagination.query}:${listPagination.filter}:${listPagination.sort}`
+                  : 'all'
+              }
+              initialPersons={listPersons}
               relationships={relationships}
               canEdit={canEdit}
+              pagination={listPagination}
             />
           </div>
         )}
@@ -155,17 +202,23 @@ export default function MembersViews({
           {currentView === 'tree' && (
             <FamilyTree
               personsMap={personsMap}
-              relationships={relationships}
+              relationships={graphRelationships}
               roots={roots}
               canEdit={canEdit}
+              truncated={isTruncated}
+              isLoadingMore={isLoadingMore}
+              onLoadMore={loadMore}
             />
           )}
           {currentView === 'mindmap' && (
             <MindmapTree
               personsMap={personsMap}
-              relationships={relationships}
+              relationships={graphRelationships}
               roots={roots}
               canEdit={canEdit}
+              truncated={isTruncated}
+              isLoadingMore={isLoadingMore}
+              onLoadMore={loadMore}
             />
           )}
           {currentView === 'bubble' && (

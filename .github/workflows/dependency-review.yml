@@ -1,0 +1,143 @@
+name: Dependency Review
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    name: Dependency and vulnerability report
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@b7a1c7ccf290d58743029c4f6903da283811b979 # v2.1.0
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Report outdated dependencies
+        shell: bash
+        run: |
+          set +e
+          outdated_output="$(bun outdated 2>&1)"
+          outdated_status=$?
+          set -e
+
+          {
+            echo '## Bun outdated'
+            echo
+            echo '```text'
+            printf '%s\n' "$outdated_output"
+            echo '```'
+            echo
+            echo "Command exit code: \`$outdated_status\`. This report never updates branches or opens pull requests."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Scan committed Bun lockfile
+        id: osv-scan
+        continue-on-error: true
+        uses: google/osv-scanner-action/osv-scanner-action@0c58c542420dfd23fcac08dd9c8ca3cca9c36f1a # v2.5.0
+        with:
+          scan-args: |-
+            scan
+            source
+            --lockfile
+            bun.lock
+            --format
+            json
+            --output-file
+            /github/workspace/osv-results.json
+
+      - name: Summarize vulnerabilities and enforce threshold
+        shell: bash
+        run: |
+          test -s osv-results.json || {
+            echo '## OSV vulnerability scan' >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo 'OSV Scanner did not produce a JSON report. Review the scanner step logs.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+
+          bun run - <<'BUN'
+          import { readFileSync, appendFileSync } from 'node:fs';
+
+          const report = JSON.parse(readFileSync('osv-results.json', 'utf8'));
+          const findings = [];
+
+          for (const result of report.results ?? []) {
+            for (const packageResult of result.packages ?? []) {
+              const severityById = new Map();
+
+              for (const group of packageResult.groups ?? []) {
+                const severity = Number.parseFloat(group.max_severity);
+                for (const id of group.ids ?? []) {
+                  severityById.set(id, Number.isFinite(severity) ? severity : null);
+                }
+              }
+
+              for (const vulnerability of packageResult.vulnerabilities ?? []) {
+                findings.push({
+                  packageName: packageResult.package?.name ?? 'unknown',
+                  version: packageResult.package?.version ?? 'unknown',
+                  id: vulnerability.id ?? 'unknown',
+                  severity: severityById.get(vulnerability.id) ?? null,
+                });
+              }
+            }
+          }
+
+          const uniqueFindings = [...new Map(
+            findings.map((finding) => [
+              `${finding.packageName}\u0000${finding.version}\u0000${finding.id}`,
+              finding,
+            ]),
+          ).values()].sort((left, right) =>
+            (right.severity ?? -1) - (left.severity ?? -1) || left.id.localeCompare(right.id),
+          );
+
+          const lines = [
+            '## OSV vulnerability scan',
+            '',
+            'Scanned the committed `bun.lock`. Every finding remains visible; unknown severity requires manual triage.',
+            '',
+          ];
+
+          if (uniqueFindings.length === 0) {
+            lines.push('No known vulnerabilities found.');
+          } else {
+            lines.push('| Package | Version | Vulnerability | CVSS | Gate |');
+            lines.push('| --- | --- | --- | ---: | --- |');
+
+            for (const finding of uniqueFindings) {
+              const severity = finding.severity;
+              const score = severity === null ? 'Unknown' : severity.toFixed(1);
+              const gate = severity === null
+                ? 'Manual triage'
+                : severity >= 7
+                  ? 'Fail: high/critical'
+                  : 'Report: low/medium';
+              lines.push(`| ${finding.packageName} | ${finding.version} | ${finding.id} | ${score} | ${gate} |`);
+            }
+          }
+
+          const blockingFindings = uniqueFindings.filter(
+            ({ severity }) => severity !== null && severity >= 7,
+          );
+          lines.push('', `Blocking findings (CVSS >= 7.0): **${blockingFindings.length}**.`);
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
+
+          if (blockingFindings.length > 0) {
+            process.exit(1);
+          }
+          BUN

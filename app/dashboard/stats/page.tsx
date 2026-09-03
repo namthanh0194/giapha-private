@@ -1,4 +1,6 @@
 import FamilyStats from '@/components/FamilyStats'
+import type { Person, Relationship } from '@/types'
+import { fetchAllRows } from '@/utils/supabase/pagination'
 import { getSupabase } from '@/utils/supabase/queries'
 
 export const metadata = {
@@ -8,10 +10,26 @@ export const metadata = {
 export default async function StatsPage() {
   const supabase = await getSupabase()
 
-  const { data: persons } = await supabase.from('persons').select('*')
-  const { data: relationships } = await supabase
-    .from('relationships')
-    .select('*')
+  const [persons, relationships] = await Promise.all([
+    fetchAllRows<Person>(async (from, to) => {
+      const { data, error } = await supabase
+        .from('persons')
+        .select(
+          'id, gender, birth_year, birth_month, birth_day, generation, birth_order, is_in_law, is_deceased'
+        )
+        .order('id', { ascending: true })
+        .range(from, to)
+      return { data: data as unknown as Person[] | null, error }
+    }),
+    fetchAllRows<Relationship>(async (from, to) => {
+      const { data, error } = await supabase
+        .from('relationships')
+        .select('type, person_a, person_b')
+        .order('id', { ascending: true })
+        .range(from, to)
+      return { data: data as unknown as Relationship[] | null, error }
+    })
+  ])
 
   return (
     <div className='relative flex w-full flex-1 flex-col pb-12'>
@@ -23,10 +41,7 @@ export default async function StatsPage() {
       </div>
 
       <main className='mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 lg:px-8'>
-        <FamilyStats
-          persons={persons ?? []}
-          relationships={relationships ?? []}
-        />
+        <FamilyStats persons={persons} relationships={relationships} />
       </main>
     </div>
   )

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { Person } from '@/types'
 import { getAvatarUrl } from '@/utils/avatar'
@@ -22,6 +22,15 @@ const getAvatarBg = (gender: string) => {
   return 'bg-linear-to-br from-stone-400 to-stone-600'
 }
 
+type SearchPerson = {
+  id: string
+  full_name: string
+  gender: Person['gender']
+  birth_year: number | null
+  avatar_url: string | null
+  is_private_placeholder: boolean
+}
+
 export default function PersonSelector({
   persons,
   selectedId,
@@ -43,16 +52,36 @@ export default function PersonSelector({
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchPerson[]>([])
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const currentPerson = persons.find((p) => p.id === selectedId)
 
-  const filteredPersons = persons
-    .filter((p) => {
-      const searchStr = `${p.full_name} ${p.birth_year || ''}`.toLowerCase()
-      return searchStr.includes(searchTerm.toLowerCase())
-    })
-    .slice(0, 20)
+  useEffect(() => {
+    if (!isOpen || searchTerm.trim().length < 2) return
+
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/search/persons?q=${encodeURIComponent(searchTerm.trim())}&limit=20`,
+          { signal: controller.signal }
+        )
+        if (!response.ok) return
+        const payload = (await response.json()) as { persons: SearchPerson[] }
+        setSearchResults(payload.persons ?? [])
+      } catch (error) {
+        if ((error as DOMException).name !== 'AbortError') {
+          setSearchResults([])
+        }
+      }
+    }, 275)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
+  }, [isOpen, searchTerm])
 
   const handleSelect = (personId: string | null) => {
     onSelect(personId)
@@ -127,29 +156,32 @@ export default function PersonSelector({
           )}
           <p className='truncate leading-tight font-medium text-stone-800 select-none'>
             {currentPerson
-              ? `${currentPerson.full_name} ${currentPerson.birth_year ? `(${currentPerson.birth_year})` : ''}`
-              : showAllOption && !selectedId
+              ? currentPerson.full_name
+              : showAllOption && selectedId === null
                 ? allOptionLabel
                 : placeholder}
           </p>
+          {currentPerson && currentPerson.birth_year && (
+            <p className='mt-0.5 text-sm leading-none text-stone-400 select-none'>
+              Sinh năm {currentPerson.birth_year}
+            </p>
+          )}
         </div>
 
-        <motion.div
-          animate={{ rotate: isOpen ? 180 : 0 }}
-          transition={{ duration: 0.3, ease: 'easeInOut' }}>
-          <ChevronDown
-            className={`size-4 shrink-0 transition-colors ${isOpen ? 'text-amber-600' : 'text-stone-400 group-hover:text-stone-600'}`}
-          />
-        </motion.div>
+        <ChevronDown
+          className={`size-4 text-stone-400 transition-transform duration-300 group-hover:text-amber-600 ${
+            isOpen ? 'rotate-180 text-amber-600' : ''
+          }`}
+        />
       </button>
 
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.98 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.15 }}
             className='absolute z-50 mt-2 flex max-h-80 w-full flex-col overflow-hidden rounded-xl border border-stone-200/80 bg-white/95 ring-1 ring-black/5 backdrop-blur-xl'>
             <div className='sticky top-0 z-10 border-b border-stone-100/80 bg-stone-50/50 p-2 backdrop-blur-sm'>
               <div className='relative'>
@@ -157,7 +189,7 @@ export default function PersonSelector({
                 <input
                   type='text'
                   className='w-full rounded-lg border border-stone-200/80 bg-white py-2 pr-3 pl-9 text-sm text-stone-900 placeholder-stone-400 transition-all outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20'
-                  placeholder='Tìm thành viên...'
+                  placeholder='Tìm kiếm (tối thiểu 2 ký tự)...'
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   autoFocus
@@ -190,18 +222,19 @@ export default function PersonSelector({
                 </button>
               )}
 
-              {filteredPersons.length > 0 ? (
+              {searchTerm.trim().length >= 2 && searchResults.length > 0 ? (
                 <div className='space-y-0.5'>
-                  {filteredPersons.map((person) => {
+                  {searchResults.map((person) => {
                     const isSelected = person.id === selectedId
                     return (
                       <button
                         key={person.id}
-                        onClick={() => handleSelect(person.id)}
+                        onClick={() => !person.is_private_placeholder && handleSelect(person.id)}
+                        disabled={person.is_private_placeholder}
                         className={`group/item flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
                           isSelected
                             ? 'border border-amber-200/50 bg-amber-50 text-amber-900'
-                            : 'border border-transparent text-stone-700 hover:bg-stone-100/80'
+                            : 'border border-transparent text-stone-700 hover:bg-stone-100/80 disabled:cursor-not-allowed disabled:opacity-60'
                         }`}>
                         <div className='relative shrink-0'>
                           <div
@@ -239,11 +272,6 @@ export default function PersonSelector({
                               </span>
                             ) : null}
                           </p>
-                          {person.generation != null && (
-                            <p className='text-sm font-medium text-stone-400'>
-                              Đời thứ {person.generation}
-                            </p>
-                          )}
                         </div>
 
                         {isSelected && (
@@ -259,10 +287,14 @@ export default function PersonSelector({
                     <Search className='size-5 text-stone-300' />
                   </div>
                   <div className='text-sm font-medium text-stone-600'>
-                    Không tìm thấy kết quả
+                    {searchTerm.trim().length < 2
+                      ? 'Nhập ít nhất 2 ký tự để tìm kiếm'
+                      : 'Không tìm thấy kết quả'}
                   </div>
                   <div className='text-sm text-stone-400'>
-                    Thử tìm với tên khác
+                    {searchTerm.trim().length < 2
+                      ? 'Hỗ trợ gõ tiếng Việt có hoặc không dấu'
+                      : 'Thử tìm với tên khác'}
                   </div>
                 </div>
               )}

@@ -76,6 +76,10 @@ export const MindmapNode = memo(
 
     if (!data.person) return null
 
+    const isPlaceholder =
+      Boolean(data.person.is_private_placeholder) ||
+      data.person.id.startsWith('private:') ||
+      data.person.full_name === 'Thành viên riêng tư'
     const hasChildren = data.children.length > 0
 
     return (
@@ -128,7 +132,9 @@ export const MindmapNode = memo(
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.3 }}
                 className={`group/card relative flex cursor-pointer flex-wrap items-center gap-2 overflow-hidden rounded-2xl border border-stone-200/60 bg-white/60 p-2 transition-all duration-300 hover:border-amber-300 hover:bg-white/90 sm:p-2.5 ${data.person.is_deceased ? 'opacity-80 grayscale-[0.3]' : ''}`}
-                onClick={() => ctx.setMemberModalId(data.person.id)}>
+                onClick={() => {
+                  if (!isPlaceholder) ctx.setMemberModalId(data.person.id)
+                }}>
                 <div className='relative z-10 flex w-full items-center gap-2.5'>
                   <div className='flex min-w-0 flex-1 items-center gap-2.5'>
                     {ctx.showAvatar && (
@@ -208,7 +214,13 @@ export const MindmapNode = memo(
                             key={spouseData.person.id}
                             onClick={(e) => {
                               e.stopPropagation()
-                              ctx.setMemberModalId(spouseData.person.id)
+                              if (
+                                !Boolean(
+                                  spouseData.person.is_private_placeholder
+                                ) &&
+                                !spouseData.person.id.startsWith('private:')
+                              )
+                                ctx.setMemberModalId(spouseData.person.id)
                             }}
                             className={`group/spouse flex cursor-pointer flex-col items-center gap-1 rounded-xl border border-stone-200/60 bg-stone-50/50 p-1.5 transition-all hover:border-amber-300 hover:bg-white ${spouseData.person.is_deceased ? 'opacity-80 grayscale-[0.3]' : ''}`}
                             title={

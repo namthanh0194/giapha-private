@@ -17,12 +17,18 @@ export default function FamilyTree({
   personsMap,
   relationships,
   roots,
-  canEdit
+  canEdit,
+  truncated = false,
+  isLoadingMore = false,
+  onLoadMore
 }: {
   personsMap: Map<string, Person>
   relationships: Relationship[]
   roots: Person[]
   canEdit?: boolean
+  truncated?: boolean
+  isLoadingMore?: boolean
+  onLoadMore?: () => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [hideDaughtersInLaw, setHideDaughtersInLaw] = useState(false)
@@ -213,13 +219,14 @@ export default function FamilyTree({
     const data = getTreeData(personId)
     if (!data.person) return null
 
+    const isPrivatePlaceholder = Boolean(data.person.is_private_placeholder)
     const hasChildren = data.children.length > 0
     const isCollapsed = collapsedNodes.has(personId)
 
     return (
       <li>
         <div
-          className='node-container inline-flex flex-col items-center'
+          className={`node-container inline-flex flex-col items-center ${isPrivatePlaceholder ? 'pointer-events-none' : ''}`}
           data-level={level}>
           {/* Main Person & Spouses Row */}
           <div
@@ -316,6 +323,14 @@ export default function FamilyTree({
         setHideFemales={setHideFemales}
         canEdit={canEdit}
       />
+
+      {truncated && onLoadMore && (
+        <div className='absolute top-4 right-4 z-30 rounded-xl border border-stone-200 bg-white p-2'>
+          <button type='button' className='rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-wait disabled:opacity-60' disabled={isLoadingMore} onClick={onLoadMore}>
+            {isLoadingMore ? 'Đang tải...' : 'Tải thêm thế hệ'}
+          </button>
+        </div>
+      )}
 
       <div
         ref={containerRef}

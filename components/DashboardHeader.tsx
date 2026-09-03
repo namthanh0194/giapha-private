@@ -10,7 +10,7 @@ export default function DashboardHeader() {
         <div className='flex items-center gap-4'>
           <Link
             href='/dashboard'
-            className='group flex items-center gap-2 sm:gap-3'>
+            className='group flex min-h-11 items-center gap-2 sm:gap-3'>
             <div className='relative size-10 shrink-0 overflow-hidden rounded-xl transition-all'>
               <Image
                 src='/icon.png'

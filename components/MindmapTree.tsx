@@ -16,13 +16,19 @@ interface MindmapTreeProps {
   relationships: Relationship[]
   roots: Person[]
   canEdit?: boolean
+  truncated?: boolean
+  isLoadingMore?: boolean
+  onLoadMore?: () => void
 }
 
 export default function MindmapTree({
   personsMap,
   relationships,
   roots,
-  canEdit
+  canEdit,
+  truncated = false,
+  isLoadingMore = false,
+  onLoadMore
 }: MindmapTreeProps) {
   const { showAvatar, setMemberModalId } = useMemberListView()
   const [hideDaughtersInLaw, setHideDaughtersInLaw] = useState(false)
@@ -88,6 +94,13 @@ export default function MindmapTree({
 
   return (
     <div className='relative flex h-full min-h-[calc(100vh-140px)] w-full justify-start overflow-x-auto p-4 sm:p-6 lg:justify-center lg:p-8'>
+      {truncated && onLoadMore && (
+        <div className='absolute top-4 right-4 z-30 rounded-xl border border-stone-200 bg-white p-2'>
+          <button type='button' className='rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-wait disabled:opacity-60' disabled={isLoadingMore} onClick={onLoadMore}>
+            {isLoadingMore ? 'Đang tải...' : 'Tải thêm thế hệ'}
+          </button>
+        </div>
+      )}
       <MindmapToolbar
         hideDaughtersInLaw={hideDaughtersInLaw}
         setHideDaughtersInLaw={setHideDaughtersInLaw}

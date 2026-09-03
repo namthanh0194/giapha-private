@@ -1,5 +1,8 @@
 import LineageManager from '@/components/LineageManager'
+import type { Person, Relationship } from '@/types'
+import { fetchAllRows } from '@/utils/supabase/pagination'
 import { getProfile, getSupabase } from '@/utils/supabase/queries'
+import { Baby, HeartHandshake, Network } from 'lucide-react'
 import { redirect } from 'next/navigation'
 
 export default async function LineagePage() {
@@ -11,16 +14,27 @@ export default async function LineagePage() {
 
   const supabase = await getSupabase()
 
-  const { data: personsData } = await supabase
-    .from('persons')
-    .select('*')
-    .order('birth_year', { ascending: true, nullsFirst: false })
-
-  const { data: relsData } = await supabase.from('relationships').select('*')
-
-  // Identify "roots" - people with no parents
-  const persons = personsData || []
-  const relationships = relsData || []
+  const [persons, relationships] = await Promise.all([
+    fetchAllRows<Person>(async (from, to) => {
+      const { data, error } = await supabase
+        .from('persons')
+        .select(
+          'id, version, full_name, gender, birth_year, generation, birth_order, is_in_law'
+        )
+        .order('birth_year', { ascending: true, nullsFirst: false })
+        .order('id', { ascending: true })
+        .range(from, to)
+      return { data: data as unknown as Person[] | null, error }
+    }),
+    fetchAllRows<Relationship>(async (from, to) => {
+      const { data, error } = await supabase
+        .from('relationships')
+        .select('type, person_a, person_b')
+        .order('id', { ascending: true })
+        .range(from, to)
+      return { data: data as unknown as Relationship[] | null, error }
+    })
+  ])
 
   return (
     <main className='relative flex w-full flex-1 flex-col overflow-auto bg-stone-50/50 pt-8'>
@@ -41,7 +55,9 @@ export default async function LineagePage() {
         <div className='mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2'>
           <div className='rounded-2xl border border-stone-200/60 bg-white/80 p-5'>
             <div className='flex items-start gap-3'>
-              <span className='text-sm'>🌳</span>
+              <span className='rounded-xl border border-stone-200 bg-stone-50 p-2 text-stone-700'>
+                <Network className='size-4' aria-hidden='true' />
+              </span>
               <div>
                 <h3 className='mb-1 text-base font-semibold text-stone-800'>
                   Thế hệ (Generation)
@@ -56,7 +72,9 @@ export default async function LineagePage() {
           </div>
           <div className='flex flex-col gap-4 rounded-2xl border border-stone-200/60 bg-white/80 p-5'>
             <div className='flex items-start gap-3'>
-              <span className='text-sm'>👶</span>
+              <span className='rounded-xl border border-stone-200 bg-stone-50 p-2 text-stone-700'>
+                <Baby className='size-4' aria-hidden='true' />
+              </span>
               <div>
                 <h3 className='mb-1 text-base font-semibold text-stone-800'>
                   Thứ tự sinh (Birth Order)
@@ -69,7 +87,9 @@ export default async function LineagePage() {
               </div>
             </div>
             <div className='flex items-start gap-3'>
-              <span className='text-sm'>💍</span>
+              <span className='rounded-xl border border-stone-200 bg-stone-50 p-2 text-stone-700'>
+                <HeartHandshake className='size-4' aria-hidden='true' />
+              </span>
               <div>
                 <h3 className='mb-1 text-base font-semibold text-stone-800'>
                   Dâu / Rể (In-Law Status)

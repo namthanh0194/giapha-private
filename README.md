@@ -141,6 +141,54 @@ Mở trình duyệt và truy cập: `http://localhost:3000`
 
 ---
 
+## Kiểm thử cơ sở dữ liệu
+
+Nguồn migration chính thức duy nhất là `supabase/migrations/`; thứ tự triển khai được khai báo tường minh tại `utils/migrations/catalog.ts` và được dùng chung cho `/setup` và Dashboard upgrade.
+
+Hướng dẫn triển khai, rollback và kết quả verification Phase 1 ngày 2 tháng 9 năm 2026 nằm tại `docs/releases/2026-09-phase-1-hardening.md`.
+
+Docker Desktop phải đang chạy. Khởi động Supabase local và chạy pgTAP:
+
+```bash
+bun x supabase start
+bun x supabase test db
+```
+
+## Kiểm thử ứng dụng
+
+Chạy kiểm thử TypeScript và kiểm tra kiểu dữ liệu:
+
+```bash
+bun run test:run
+bun run typecheck
+```
+
+Chạy toàn bộ release gate ứng dụng:
+
+```bash
+bun run verify
+```
+
+Chạy browser E2E chỉ với Supabase local có thể xóa dữ liệu (suite kiểm thử luồng phục hồi backup), nên phải xác nhận database là disposable:
+
+```powershell
+$env:E2E_DISPOSABLE_LOCAL_SUPABASE = '1'
+bun run test:e2e
+```
+
+GitHub Actions chạy hai job cho mọi pull request và push vào `master`: `Application` kiểm tra lint, kiểu dữ liệu, unit test và build; `Database` khởi động Supabase local, reset schema và chạy pgTAP.
+
+### Chính sách cập nhật dependency
+
+Workflow `Dependency Review` chạy hàng tuần hoặc theo yêu cầu để ghi kết quả `bun outdated` và OSV scan của `bun.lock` vào job summary. Workflow chỉ báo cáo, không sửa branch, mở pull request hoặc tự nâng phiên bản.
+
+- Bản vá bảo mật: đánh giá và xử lý ngay.
+- Bản cập nhật minor: đánh giá theo lịch hàng tuần.
+- Bản cập nhật major: lập kế hoạch migration riêng trước khi nâng cấp.
+- Lỗ hổng CVSS từ `7.0` trở lên làm workflow thất bại; mức thấp hơn và severity chưa xác định vẫn hiển thị để triage thủ công.
+
+---
+
 ## Tài khoản đầu tiên
 
 - Đăng ký tài khoản mới khi vào web lần đầu.

@@ -11,6 +11,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 
+import DialogShell from './DialogShell'
+
 export default function MemberDetailModal() {
   const {
     memberModalId: memberId,
@@ -107,17 +109,6 @@ export default function MemberDetailModal() {
     }
   }, [memberId, showCreateMember, fetchData])
 
-  // Prevent background scrolling when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = 'unset'
-    }
-    return () => {
-      document.body.style.overflow = 'unset'
-    }
-  }, [isOpen])
 
   // Called by MemberForm after a successful save
   const handleEditSuccess = (savedPersonId: string) => {
@@ -147,32 +138,18 @@ export default function MemberDetailModal() {
     ? { ...person, ...(privateData ?? {}) }
     : undefined
 
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className='fixed inset-0 z-100 flex items-center justify-center bg-stone-900/40 p-4 backdrop-blur-sm sm:p-6'>
-          {/* Click-away backdrop (disabled while editing/creating to avoid accidental close) */}
-          {!isEditing && !showCreateMember && (
-            <div
-              className='absolute inset-0 cursor-pointer'
-              onClick={closeModal}
-            />
-          )}
-
-          {/* Modal Content */}
-          <motion.div
-            layout
-            initial={{ scale: 0.96, opacity: 0, y: 15 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.96, opacity: 0, y: 15 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-            layoutDependency={false}
-            className='relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white/95 backdrop-blur-2xl'>
+  return isOpen ? (
+    <DialogShell
+      title={
+        showCreateMember
+          ? 'Thêm thành viên mới'
+          : isEditing
+            ? 'Chỉnh sửa thành viên'
+            : 'Chi tiết thành viên'
+      }
+      onClose={closeModal}
+      canClose={!isEditing && !showCreateMember}
+      maxWidthClass='max-w-4xl'>
             {/* Sticky Header Actions */}
             <div className='absolute top-4 right-4 z-20 flex items-center gap-2 sm:top-5 sm:right-5'>
               {isEditing ? (
@@ -206,9 +183,9 @@ export default function MemberDetailModal() {
               )}
               <button
                 onClick={closeModal}
-                className='flex size-10 items-center justify-center rounded-full border border-stone-200/50 bg-stone-100/80 text-stone-600 transition-colors hover:bg-stone-200 hover:text-stone-900'
+                className='flex size-11 items-center justify-center rounded-full border border-stone-200/50 bg-stone-100/80 text-stone-600 transition-colors hover:bg-stone-200 hover:text-stone-900'
                 aria-label='Đóng'>
-                <X className='size-5' />
+                <X className='size-5' aria-hidden='true' />
               </button>
             </div>
 
@@ -302,9 +279,6 @@ export default function MemberDetailModal() {
                 </motion.div>
               ) : null}
             </AnimatePresence>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
+    </DialogShell>
+  ) : null
 }

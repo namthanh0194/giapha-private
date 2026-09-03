@@ -22,7 +22,7 @@ export default function Footer({
             href='https://www.facebook.com/nampalmyran'
             target='_blank'
             rel='noopener noreferrer'
-            className='inline-flex items-center gap-1.5 font-medium text-stone-600 transition-colors hover:text-amber-700'>
+            className='inline-flex min-h-11 items-center gap-1.5 font-medium text-stone-600 transition-colors hover:text-amber-700'>
             Design by NamNt
           </a>
         </p>

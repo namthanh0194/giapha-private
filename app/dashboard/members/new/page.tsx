@@ -37,7 +37,7 @@ export default async function NewMemberPage() {
         <div className='flex items-center gap-3'>
           <Link
             href='/dashboard/members'
-            className='-ml-2 rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600'
+            className='-ml-2 flex min-h-11 min-w-11 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600'
             title='Quay lại danh sách'>
             <ArrowLeft className='size-5' />
           </Link>
@@ -45,13 +45,13 @@ export default async function NewMemberPage() {
         </div>
         <Link
           href='/dashboard/members'
-          className='rounded-lg bg-stone-100/80 px-4 py-2 text-sm font-medium text-stone-700 shadow-sm transition-all hover:bg-stone-200 hover:text-stone-900'>
+          className='inline-flex min-h-11 items-center rounded-lg bg-stone-100/80 px-4 py-2 text-sm font-medium text-stone-700 shadow-sm transition-all hover:bg-stone-200 hover:text-stone-900'>
           Hủy
         </Link>
       </div>
 
       <main className='relative z-10 mx-auto w-full max-w-3xl flex-1 px-4 py-4 sm:px-6 sm:py-6 lg:px-8'>
-        <MemberForm isAdmin={isAdmin} />
+        <MemberForm isAdmin={isAdmin} canEdit={canEdit} />
       </main>
     </div>
   )

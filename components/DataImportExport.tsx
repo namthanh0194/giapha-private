@@ -180,7 +180,9 @@ export default function DataImportExport() {
         persons: payload.persons,
         relationships: payload.relationships,
         person_details_private: payload.person_details_private,
-        custom_events: payload.custom_events
+        custom_events: payload.custom_events,
+        sources: payload.sources,
+        person_citations: payload.person_citations
       })
 
       if ('error' in result) {
@@ -205,6 +207,12 @@ export default function DataImportExport() {
       }
       if (result.imported?.custom_events) {
         parts.push(`${result.imported.custom_events} sự kiện`)
+      }
+      if (result.imported?.sources) {
+        parts.push(`${result.imported.sources} nguồn tư liệu`)
+      }
+      if (result.imported?.person_citations) {
+        parts.push(`${result.imported.person_citations} trích dẫn`)
       }
 
       setImportStatus({

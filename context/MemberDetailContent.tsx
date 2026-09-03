@@ -2,6 +2,7 @@
 
 import DefaultAvatar from '@/components/DefaultAvatar'
 import RelationshipManager from '@/components/RelationshipManager'
+import SourcesManager from '@/components/SourcesManager'
 import { Person } from '@/types'
 import { getAvatarUrl } from '@/utils/avatar'
 import {
@@ -19,6 +20,7 @@ import {
   ChevronDown,
   Info,
   Leaf,
+  Lock,
   MapPin,
   Phone,
   UserPlus,
@@ -192,6 +194,15 @@ export default function MemberDetailContent({
               {person.generation != null && (
                 <span className='rounded-md border border-emerald-200/60 bg-emerald-50/60 px-2 py-0.5 font-sans text-sm font-medium whitespace-nowrap text-emerald-700 sm:text-sm'>
                   Đời thứ {person.generation}
+                </span>
+              )}
+              {canEdit && (
+                <span className='rounded-md border border-amber-200/60 bg-amber-50/60 px-2 py-0.5 font-sans text-sm font-medium whitespace-nowrap text-amber-700'>
+                  {person.privacy_level === 'admins'
+                    ? 'Chỉ quản trị viên'
+                    : person.privacy_level === 'editors'
+                      ? 'Biên tập viên'
+                      : 'Gia đình'}
                 </span>
               )}
             </h1>
@@ -499,6 +510,10 @@ export default function MemberDetailContent({
         <div className='mt-8 grid grid-cols-1 gap-6 sm:gap-8 lg:grid-cols-3'>
           {/* Main Info */}
           <div className='space-y-8 lg:col-span-2'>
+            <motion.div layout variants={itemVariants}>
+              <SourcesManager personId={person.id} canEdit={canEdit} />
+            </motion.div>
+
             <motion.section layout variants={itemVariants}>
               <h2 className='mb-4 flex items-center gap-2 text-base font-semibold text-stone-800 sm:text-lg'>
                 <Info className='size-5 text-amber-600' />
@@ -574,7 +589,7 @@ export default function MemberDetailContent({
                 <div className='rounded-2xl border border-stone-200/80 bg-stone-50 p-5 sm:p-6'>
                   <h3 className='mb-4 flex items-center gap-2 border-b border-stone-200/60 pb-3 text-base font-semibold text-stone-900 sm:text-base'>
                     <span className='rounded-lg border border-amber-200/50 bg-amber-100/80 p-1.5 text-amber-700'>
-                      🔒
+                      <Lock className='size-4' aria-hidden='true' />
                     </span>
                     Thông tin liên hệ
                   </h3>
@@ -619,7 +634,7 @@ export default function MemberDetailContent({
                 </div>
               ) : (
                 <div className='flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-stone-200 bg-stone-50/50 p-5 text-center'>
-                  <span className='text-sm opacity-50'>🔒</span>
+                  <Lock className='size-4 text-stone-400' aria-hidden='true' />
                   <p className='text-sm font-medium text-stone-500'>
                     Thông tin liên hệ chỉ hiển thị với Quản trị viên.
                   </p>

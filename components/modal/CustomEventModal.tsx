@@ -1,6 +1,10 @@
 'use client'
 
 import { CustomEventRecord } from '@/utils/eventHelpers'
+import {
+  deleteCustomEventAction,
+  updateCustomEventAction
+} from '@/app/actions/member'
 import { createClient } from '@/utils/supabase/client'
 import { AnimatePresence, motion, Variants } from 'framer-motion'
 import {
@@ -14,6 +18,8 @@ import {
   X
 } from 'lucide-react'
 import { Lunar } from 'lunar-javascript'
+
+import DialogShell from './DialogShell'
 import { useEffect, useState } from 'react'
 
 interface CustomEventModalProps {
@@ -21,13 +27,15 @@ interface CustomEventModalProps {
   onClose: () => void
   onSuccess: () => void
   eventToEdit?: CustomEventRecord | null
+  canEdit?: boolean
 }
 
 export default function CustomEventModal({
   isOpen,
   onClose,
   onSuccess,
-  eventToEdit
+  eventToEdit,
+  canEdit = true
 }: CustomEventModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -106,20 +114,10 @@ export default function CustomEventModal({
     }
   }, [dateMode, lunarDay, lunarMonth, lunarYear])
 
-  // Prevent background scrolling when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = 'unset'
-    }
-    return () => {
-      document.body.style.overflow = 'unset'
-    }
-  }, [isOpen])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!canEdit) return
     setLoading(true)
     setError(null)
 
@@ -132,21 +130,22 @@ export default function CustomEventModal({
         content: content || null
       }
 
-      let resultError
       if (eventToEdit) {
-        const { error: err } = await supabase
-          .from('custom_events')
-          .update(payload)
-          .eq('id', eventToEdit.id)
-        resultError = err
+        const result = await updateCustomEventAction(
+          eventToEdit.id,
+          eventToEdit.version,
+          payload
+        )
+        if (!result.success) {
+          setError(result.error)
+          return
+        }
       } else {
         const { error: err } = await supabase
           .from('custom_events')
           .insert([payload])
-        resultError = err
+        if (err) throw err
       }
-
-      if (resultError) throw resultError
 
       onSuccess()
       onClose()
@@ -163,19 +162,21 @@ export default function CustomEventModal({
   }
 
   const handleDelete = async () => {
+    if (!canEdit) return
     if (!eventToEdit) return
     if (!window.confirm('Bạn có chắc chắn muốn xoá sự kiện này?')) return
 
     setLoading(true)
     setError(null)
     try {
-      const supabase = createClient()
-      const { error: err } = await supabase
-        .from('custom_events')
-        .delete()
-        .eq('id', eventToEdit.id)
-
-      if (err) throw err
+      const result = await deleteCustomEventAction(
+        eventToEdit.id,
+        eventToEdit.version
+      )
+      if (!result.success) {
+        setError(result.error)
+        return
+      }
 
       onSuccess()
       onClose()
@@ -203,33 +204,23 @@ export default function CustomEventModal({
   const inputClasses =
     'bg-white text-stone-900 placeholder-stone-500 block w-full rounded-xl border border-stone-300  focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:bg-white text-sm px-4 py-3 transition-all outline-none!'
 
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className='fixed inset-0 z-100 flex items-center justify-center bg-stone-900/40 p-4 backdrop-blur-sm sm:p-6'>
-          {/* Click-away backdrop */}
-          <div className='absolute inset-0 cursor-pointer' onClick={onClose} />
+  if (!canEdit) return null
 
-          {/* Modal Content */}
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.95, opacity: 0, y: 20 }}
-            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-            className='relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white/95 backdrop-blur-2xl'>
+  return isOpen ? (
+    <DialogShell
+      title={eventToEdit ? 'Chỉnh sửa sự kiện' : 'Thêm sự kiện'}
+      onClose={onClose}
+      canClose={!loading}
+      maxWidthClass='max-w-2xl'>
             {/* Sticky Header Actions */}
             <div className='absolute top-4 right-4 z-20 flex items-center gap-2 sm:top-5 sm:right-5'>
               <button
                 type='button'
-                onClick={onClose}
-                className='flex size-10 items-center justify-center rounded-full border border-stone-200/50 bg-stone-100/80 text-stone-600 transition-colors hover:bg-stone-200 hover:text-stone-900'
-                aria-label='Đóng'>
-                <X className='size-5' />
+                onClick={() => !loading && onClose()}
+                disabled={loading}
+                aria-label='Đóng hộp thoại sự kiện'
+                className='flex size-11 items-center justify-center rounded-full border border-stone-200/50 bg-stone-100/80 text-stone-600 transition-colors hover:bg-stone-200 hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-50'>
+                <X className='size-5' aria-hidden='true' />
               </button>
             </div>
 
@@ -440,9 +431,6 @@ export default function CustomEventModal({
                 </motion.div>
               </form>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
+    </DialogShell>
+  ) : null
 }

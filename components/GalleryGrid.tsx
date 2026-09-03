@@ -5,9 +5,9 @@ import dayjs from 'dayjs'
 import { CalendarDays, Maximize2, X, Clock } from 'lucide-react'
 import { useState, useMemo } from 'react'
 
-import { createClient } from '@/utils/supabase/client'
-import { getGalleryStoragePath } from '@/utils/supabase/storage-path'
+import { deleteGalleryItemAction } from '@/app/actions/gallery'
 import Image from 'next/image'
+import DialogShell from '@/components/modal/DialogShell'
 
 interface GalleryGridProps {
   items: GalleryItem[]
@@ -84,27 +84,18 @@ export default function GalleryGrid({
     if (!confirm('Bạn có chắc chắn muốn xóa hình ảnh này?')) return
     setIsDeleting(true)
     try {
-      const supabase = createClient()
-
-      // Delete from storage if possible
-      const storagePath =
-        item.storage_path || getGalleryStoragePath(item.image_url)
-      if (storagePath) {
-        await supabase.storage.from('gallery').remove([storagePath])
+      const result = await deleteGalleryItemAction(item.id, item.version ?? 1)
+      if (!result.success) {
+        alert(
+          result.errorId
+            ? result.error + ' Mã sự cố: ' + result.errorId
+            : result.error || 'Đã xảy ra lỗi khi xóa hình ảnh.'
+        )
+        return
       }
-
-      // Delete from db
-      const { error } = await supabase
-        .from('gallery_items')
-        .delete()
-        .eq('id', item.id)
-      if (error) throw error
 
       setSelectedItem(null)
       if (onDeleteSuccess) onDeleteSuccess(item.id)
-    } catch (err) {
-      console.error('Error deleting gallery item', err)
-      alert('Đã xảy ra lỗi khi xóa hình ảnh.')
     } finally {
       setIsDeleting(false)
     }
@@ -132,9 +123,11 @@ export default function GalleryGrid({
       {viewMode === 'grid' ? (
         <div className='columns-1 gap-4 space-y-4 sm:columns-2 lg:columns-3 xl:columns-4'>
           {items.map((item) => (
-            <div
+            <button
               key={item.id}
-              className='group relative cursor-pointer break-inside-avoid overflow-hidden rounded-2xl bg-stone-100 shadow-sm transition-all duration-500 hover:shadow-xl'
+              type='button'
+              aria-label={item.title}
+              className='group relative block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-2xl bg-stone-100 text-left shadow-sm transition-all duration-500 hover:shadow-xl'
               onClick={() => setSelectedItem(item)}>
               {/* Image */}
               <Image
@@ -150,9 +143,9 @@ export default function GalleryGrid({
               {/* Overlay */}
               <div className='absolute inset-0 flex flex-col justify-end bg-linear-to-t from-stone-900/80 via-stone-900/20 to-transparent p-5 opacity-0 transition-opacity duration-300 group-hover:opacity-100'>
                 <div className='translate-y-4 transform transition-transform duration-300 group-hover:translate-y-0'>
-                  <h3 className='mb-1 line-clamp-2 text-lg leading-tight font-semibold text-white'>
+                  <span className='mb-1 block line-clamp-2 text-sm leading-tight font-semibold text-white'>
                     {item.title}
-                  </h3>
+                  </span>
                   {item.event_date && (
                     <p className='flex items-center gap-1.5 text-sm font-medium text-stone-300'>
                       <CalendarDays className='size-3.5' />
@@ -165,10 +158,10 @@ export default function GalleryGrid({
               {/* Top Right Icon */}
               <div className='absolute top-4 right-4 opacity-0 transition-opacity delay-100 duration-300 group-hover:opacity-100'>
                 <div className='rounded-full bg-white/20 p-2 text-white backdrop-blur-md'>
-                  <Maximize2 className='size-4' />
+                  <Maximize2 className='size-4' aria-hidden='true' />
                 </div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       ) : (
@@ -179,7 +172,7 @@ export default function GalleryGrid({
               {/* Timeline Header Badge */}
               <div className='relative mb-6 flex items-center gap-3'>
                 <div className='absolute -left-7 z-10 flex size-6 items-center justify-center rounded-full border-4 border-stone-50 bg-amber-600 sm:-left-11 sm:size-7'>
-                  <Clock className='size-3 text-white' />
+                  <Clock className='size-3 text-white' aria-hidden='true' />
                 </div>
                 <h2 className='inline-block bg-stone-50/90 pr-4 font-serif text-2xl font-semibold text-stone-900 backdrop-blur-xs sm:text-3xl'>
                   {group.year}
@@ -189,10 +182,12 @@ export default function GalleryGrid({
               {/* Items under this year */}
               <div className='grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3'>
                 {group.items.map((item) => (
-                  <div
+                  <button
                     key={item.id}
+                    type='button'
+                    aria-label={item.title}
                     onClick={() => setSelectedItem(item)}
-                    className='group flex cursor-pointer flex-col justify-between rounded-2xl border border-stone-200/80 bg-white/80 p-4 backdrop-blur-xl transition-all duration-300 hover:-translate-y-1'>
+                    className='group flex w-full cursor-pointer flex-col justify-between rounded-2xl border border-stone-200/80 bg-white/80 p-4 text-left backdrop-blur-xl transition-all duration-300 hover:-translate-y-1'>
                     <div>
                       <div className='relative mb-4 aspect-16/10 overflow-hidden rounded-xl bg-stone-100'>
                         <Image
@@ -216,9 +211,9 @@ export default function GalleryGrid({
                         </span>
                       )}
 
-                      <h3 className='line-clamp-2 text-lg leading-snug font-semibold text-stone-900 transition-colors group-hover:text-amber-700'>
+                      <span className='block line-clamp-2 text-sm leading-snug font-semibold text-stone-900 transition-colors group-hover:text-amber-700'>
                         {item.title}
-                      </h3>
+                      </span>
 
                       {item.description && (
                         <p className='mt-1.5 line-clamp-2 text-sm leading-relaxed text-stone-500'>
@@ -226,7 +221,7 @@ export default function GalleryGrid({
                         </p>
                       )}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -236,14 +231,22 @@ export default function GalleryGrid({
 
       {/* Lightbox Modal */}
       {selectedItem && (
-        <div className='animate-in fade-in fixed inset-0 z-60 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm duration-200'>
+        <DialogShell
+          title={selectedItem.title}
+          description={selectedItem.description || undefined}
+          onClose={() => setSelectedItem(null)}
+          canClose={!isDeleting}
+          maxWidthClass='max-w-6xl'>
           <button
+            type='button'
             onClick={() => setSelectedItem(null)}
-            className='absolute top-4 right-4 z-10 rounded-full p-3 text-white/70 transition-colors hover:bg-white/10 hover:text-white sm:top-8 sm:right-8'>
-            <X className='size-6' />
+            disabled={isDeleting}
+            aria-label='Đóng ảnh phóng to'
+            className='absolute top-4 right-4 z-10 rounded-full bg-primary/70 p-3 text-surface transition-colors hover:bg-primary disabled:cursor-not-allowed disabled:opacity-50 sm:top-8 sm:right-8'>
+            <X className='size-6' aria-hidden='true' />
           </button>
 
-          <div className='flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-stone-950 shadow-2xl lg:flex-row'>
+          <div className='flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row'>
             {/* Image Section */}
             <div className='relative flex min-h-[50vh] flex-1 items-center justify-center bg-black/50 p-4 lg:min-h-0'>
               <Image
@@ -265,7 +268,7 @@ export default function GalleryGrid({
 
                 {selectedItem.event_date && (
                   <div className='mb-6 flex items-center gap-2 border-b border-stone-100 pb-6 font-medium text-stone-500'>
-                    <CalendarDays className='size-4' />
+                    <CalendarDays className='size-4' aria-hidden='true' />
                     <span>
                       {dayjs(selectedItem.event_date).format('DD/MM/YYYY')}
                     </span>
@@ -312,7 +315,7 @@ export default function GalleryGrid({
               </div>
             </div>
           </div>
-        </div>
+        </DialogShell>
       )}
     </>
   )

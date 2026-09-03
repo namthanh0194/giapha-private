@@ -1,7 +1,7 @@
 'use client'
 
+import { updateMemberAction } from '@/app/actions/member'
 import { Person, Relationship } from '@/types'
-import { createClient } from '@/utils/supabase/client'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertCircle,
@@ -21,6 +21,7 @@ interface LineageManagerProps {
 
 interface ComputedUpdate {
   id: string
+  version: number
   full_name: string
   old_generation: number | null
   new_generation: number | null
@@ -269,8 +270,6 @@ export default function LineageManager({
   persons,
   relationships
 }: LineageManagerProps) {
-  const supabase = createClient()
-
   const [updates, setUpdates] = useState<ComputedUpdate[] | null>(null)
   const [computing, setComputing] = useState(false)
   const [applying, setApplying] = useState(false)
@@ -295,6 +294,7 @@ export default function LineageManager({
 
         return {
           id: p.id,
+          version: p.version ?? 1,
           full_name: p.full_name,
           old_generation: p.generation,
           new_generation: newGen,
@@ -340,19 +340,19 @@ export default function LineageManager({
       const CHUNK = 20
       for (let i = 0; i < changedOnly.length; i += CHUNK) {
         const chunk = changedOnly.slice(i, i + CHUNK)
-        // Update each person individually (Supabase doesn't support bulk upsert with different values easily)
-        await Promise.all(
+        const results = await Promise.all(
           chunk.map((u) =>
-            supabase
-              .from('persons')
-              .update({
-                generation: u.new_generation,
-                birth_order: u.new_birth_order,
-                is_in_law: u.new_is_in_law
-              })
-              .eq('id', u.id)
+            updateMemberAction(u.id, u.version, {
+              generation: u.new_generation,
+              birth_order: u.new_birth_order,
+              is_in_law: u.new_is_in_law
+            })
           )
         )
+        const failed = results.find((r) => !r.success)
+        if (failed && !failed.success) {
+          throw new Error(failed.error)
+        }
       }
       setApplied(true)
     } catch (err) {

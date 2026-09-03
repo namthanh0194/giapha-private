@@ -1,5 +1,7 @@
 import { hashApprovalToken } from '@/utils/approval'
+import { logError, logInfo, logWarn } from '@/utils/logger'
 import { getAdminSupabase } from '@/utils/supabase/admin'
+import { withTelemetry } from '@/utils/telemetry'
 import { NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
@@ -74,6 +76,7 @@ function invalidRequestResponse() {
 }
 
 export async function GET(_request: Request, { params }: RouteContext) {
+  return await withTelemetry('admin.approval_view', { route: '/api/admin/approve/[token]', roleClass: 'anonymous' }, async () => {
   try {
     const { token } = await params
     const { request } = await getRequest(token)
@@ -102,15 +105,17 @@ export async function GET(_request: Request, { params }: RouteContext) {
       <p style="color:#78716c;font-size:13px;margin-bottom:0">Nếu không nhận ra tài khoản này, bạn có thể đóng trang.</p>
     `)
   } catch (error) {
-    console.error('Cannot open the pending-user approval link:', error)
+    logError('admin.approval.open_failed', error)
     return htmlResponse(
       '<h1 style="margin-top:0;color:#991b1b">Không thể xử lý</h1><p>Hệ thống chưa được cấu hình để duyệt tài khoản qua email. Vui lòng đăng nhập ứng dụng để duyệt.</p>',
       503
     )
   }
+  })
 }
 
 export async function POST(_request: Request, { params }: RouteContext) {
+  return await withTelemetry('admin.approval_submit', { route: '/api/admin/approve/[token]', roleClass: 'anonymous' }, async () => {
   try {
     const requestOrigin = new URL(_request.url).origin
     const requestOriginHeader = _request.headers.get('origin')
@@ -119,6 +124,10 @@ export async function POST(_request: Request, { params }: RouteContext) {
       (requestOriginHeader && requestOriginHeader !== requestOrigin) ||
       (requestReferer && !requestReferer.startsWith(`${requestOrigin}/`))
     ) {
+      logWarn('admin.approval.invalid_origin', {
+        hasOriginHeader: Boolean(requestOriginHeader),
+        hasReferer: Boolean(requestReferer)
+      })
       return htmlResponse(
         '<h1 style="margin-top:0;color:#991b1b">Yêu cầu không hợp lệ</h1>',
         403
@@ -152,6 +161,9 @@ export async function POST(_request: Request, { params }: RouteContext) {
 
     if (claimError) throw claimError
     if (!claimedRequest) {
+      logWarn('admin.approval.already_claimed', {
+        approvalRequestId: request.id
+      }, { requestId: request.id, userId: request.user_id })
       return htmlResponse(
         '<h1 style="margin-top:0;color:#166534">Đã xử lý</h1><p>Yêu cầu duyệt tài khoản này đã được sử dụng.</p>'
       )
@@ -163,7 +175,23 @@ export async function POST(_request: Request, { params }: RouteContext) {
       .eq('id', request.user_id)
       .maybeSingle()
 
-    if (profileError || !profile) {
+    if (profileError) {
+      logError(
+        'admin.approval.profile_lookup_failed',
+        profileError,
+        { approvalRequestId: request.id },
+        { requestId: request.id, userId: request.user_id }
+      )
+      return htmlResponse(
+        '<h1 style="margin-top:0;color:#991b1b">Không tìm thấy tài khoản</h1><p>Tài khoản có thể đã bị xóa.</p>',
+        404
+      )
+    }
+
+    if (!profile) {
+      logWarn('admin.approval.profile_not_found', {
+        approvalRequestId: request.id
+      }, { requestId: request.id, userId: request.user_id })
       return htmlResponse(
         '<h1 style="margin-top:0;color:#991b1b">Không tìm thấy tài khoản</h1><p>Tài khoản có thể đã bị xóa.</p>',
         404
@@ -180,14 +208,18 @@ export async function POST(_request: Request, { params }: RouteContext) {
       if (updateError) throw updateError
     }
 
+    logInfo('admin.approval.completed', {
+      approvalRequestId: request.id
+    }, { requestId: request.id, userId: request.user_id })
     return htmlResponse(
       `<h1 style="margin-top:0;color:#166534">Duyệt thành công</h1><p>Tài khoản <strong>${escapeHtml(request.email)}</strong> đã được cấp quyền truy cập. Người dùng có thể đăng nhập ứng dụng ngay bây giờ.</p>`
     )
   } catch (error) {
-    console.error('Cannot approve pending user:', error)
+    logError('admin.approval.failed', error)
     return htmlResponse(
       '<h1 style="margin-top:0;color:#991b1b">Duyệt thất bại</h1><p>Đã xảy ra lỗi khi cập nhật trạng thái. Vui lòng thử lại hoặc duyệt trong ứng dụng.</p>',
       500
     )
   }
+  })
 }

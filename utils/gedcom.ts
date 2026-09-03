@@ -14,6 +14,7 @@ export interface GedcomPerson {
   generation?: number | null
   avatar_url?: string | null
   note?: string | null
+  citations?: GedcomCitation[]
 }
 
 export interface GedcomRelationship {
@@ -22,9 +23,36 @@ export interface GedcomRelationship {
   person_b?: string
 }
 
+export interface GedcomSource {
+  id: string
+  title: string
+  source_type?: string | null
+  author?: string | null
+  publisher?: string | null
+  publication_date?: string | null
+  url?: string | null
+  repository?: string | null
+  note?: string | null
+}
+
+export interface GedcomCitation {
+  source_id: string
+  field_name?: string | null
+  page_reference?: string | null
+  quotation?: string | null
+  confidence?: string | null
+}
+
+export interface GedcomPersonCitation extends GedcomCitation {
+  id?: string
+  person_id: string
+}
+
 export function exportToGedcom(data: {
   persons: GedcomPerson[]
   relationships: GedcomRelationship[]
+  sources?: GedcomSource[]
+  person_citations?: GedcomPersonCitation[]
 }): string {
   let gedcom = ''
 
@@ -51,6 +79,43 @@ export function exportToGedcom(data: {
 
   const getIndiXref = (id: string | undefined) =>
     id ? `@${exportIdMap.get(id) || id.replace(/-/g, '')}@` : ''
+
+  const sourceIdMap = new Map<string, string>()
+  for (const [index, source] of (data.sources ?? []).entries()) {
+    sourceIdMap.set(source.id, `S${index + 1}`)
+  }
+
+  const citationsByPerson = new Map<string, GedcomCitation[]>()
+  for (const citation of data.person_citations ?? []) {
+    const citations = citationsByPerson.get(citation.person_id) ?? []
+    citations.push(citation)
+    citationsByPerson.set(citation.person_id, citations)
+  }
+
+  const appendMultiline = (level: number, tag: string, value: string) => {
+    const lines = value.replace(/\r/g, '').split('\n')
+    gedcom += `${level} ${tag} ${lines[0]}\n`
+    for (const line of lines.slice(1)) {
+      gedcom += `${level + 1} CONT ${line}\n`
+    }
+  }
+
+  const appendCitation = (citation: GedcomCitation) => {
+    const sourceXref = sourceIdMap.get(citation.source_id)
+    if (!sourceXref) {
+      appendMultiline(1, 'NOTE', `[Nguồn tư liệu không tìm thấy: ${citation.source_id}]`)
+      return
+    }
+
+    gedcom += `1 SOUR @${sourceXref}@\n`
+    if (citation.field_name) gedcom += `2 _FIELD ${citation.field_name}\n`
+    if (citation.page_reference) appendMultiline(2, 'PAGE', citation.page_reference)
+    if (citation.quotation) {
+      gedcom += '2 DATA\n'
+      appendMultiline(3, 'TEXT', citation.quotation)
+    }
+    if (citation.confidence) gedcom += `2 _CONF ${citation.confidence}\n`
+  }
 
   // Helper formatting Date
   const formatNum = (n: number | null) =>
@@ -197,6 +262,13 @@ export function exportToGedcom(data: {
         gedcom += `2 CONT ${lines[i]}\n`
       }
     }
+
+    for (const citation of [
+      ...(person.citations ?? []),
+      ...(citationsByPerson.get(person.id) ?? [])
+    ]) {
+      appendCitation(citation)
+    }
   }
 
   for (const fam of families) {
@@ -206,6 +278,20 @@ export function exportToGedcom(data: {
     for (const childId of fam.children) {
       gedcom += `1 CHIL ${getIndiXref(childId)}\n`
     }
+  }
+
+  for (const source of data.sources ?? []) {
+    const sourceXref = sourceIdMap.get(source.id)
+    if (!sourceXref) continue
+    gedcom += `0 @${sourceXref}@ SOUR\n`
+    appendMultiline(1, 'TITL', source.title)
+    if (source.author) appendMultiline(1, 'AUTH', source.author)
+    if (source.publisher) appendMultiline(1, 'PUBL', source.publisher)
+    if (source.publication_date) gedcom += `1 _DATE ${source.publication_date}\n`
+    if (source.url) appendMultiline(1, 'WWW', source.url)
+    if (source.repository) appendMultiline(1, '_REPO', source.repository)
+    if (source.source_type) gedcom += `1 _TYPE ${source.source_type}\n`
+    if (source.note) appendMultiline(1, 'NOTE', source.note)
   }
 
   gedcom += '0 TRLR\n'
@@ -261,15 +347,20 @@ function generateUUID() {
 export function parseGedcom(gedcom: string): {
   persons: GedcomPerson[]
   relationships: GedcomRelationship[]
+  sources: GedcomSource[]
+  person_citations: GedcomPersonCitation[]
 } {
   const lines = gedcom.split(/\r?\n/).filter((line) => line.trim().length > 0)
 
   const persons: GedcomPerson[] = []
   const relationships: GedcomRelationship[] = []
+  const sources: GedcomSource[] = []
+  const personCitations: GedcomPersonCitation[] = []
   const idMap = new Map<string, string>()
+  const fallbackSources = new Map<string, GedcomSource>()
 
   type ParseRecord = {
-    type: 'INDI' | 'FAM'
+    type: 'INDI' | 'FAM' | 'SOUR'
     id: string
     lines: string[]
   }
@@ -280,11 +371,11 @@ export function parseGedcom(gedcom: string): {
   for (const line of lines) {
     if (line.startsWith('0 ')) {
       if (currentRecord) records.push(currentRecord)
-      const match = line.match(/^0\s+@([^@]+)@\s+(INDI|FAM)/)
+      const match = line.match(/^0\s+@([^@]+)@\s+(INDI|FAM|SOUR)/)
       if (match) {
         currentRecord = {
           id: match[1],
-          type: match[2] as 'INDI' | 'FAM',
+          type: match[2] as 'INDI' | 'FAM' | 'SOUR',
           lines: []
         }
       } else {
@@ -295,6 +386,70 @@ export function parseGedcom(gedcom: string): {
     }
   }
   if (currentRecord) records.push(currentRecord)
+
+  const parsedSources = new Map<string, GedcomSource>()
+  for (const record of records.filter((item) => item.type === 'SOUR')) {
+    let title = record.id
+    let author = ''
+    let publisher = ''
+    let publicationDate = ''
+    let url = ''
+    let repository = ''
+    let sourceType = ''
+    let note = ''
+    let currentTag = ''
+    const unsupported: string[] = []
+
+    for (const line of record.lines) {
+      const match = line.match(/^(\d+)\s+([A-Z0-9_]+)(?:\s+(.*))?$/)
+      if (!match) {
+        unsupported.push(line)
+        continue
+      }
+      const level = Number(match[1])
+      const tag = match[2]
+      const value = match[3] || ''
+      if (level === 1) {
+        currentTag = tag
+        if (tag === 'TITL') title = value
+        else if (tag === 'AUTH') author = value
+        else if (tag === 'PUBL') publisher = value
+        else if (tag === '_DATE') publicationDate = value
+        else if (tag === 'WWW') url = value
+        else if (tag === '_REPO') repository = value
+        else if (tag === '_TYPE') sourceType = value
+        else if (tag === 'NOTE') note = value
+        else unsupported.push(line)
+      } else if (tag === 'CONT') {
+        if (currentTag === 'NOTE') note += `\n${value}`
+        else if (currentTag === 'TITL') title += `\n${value}`
+        else if (currentTag === 'AUTH') author += `\n${value}`
+        else if (currentTag === 'PUBL') publisher += `\n${value}`
+        else if (currentTag === 'WWW') url += `\n${value}`
+        else if (currentTag === '_REPO') repository += `\n${value}`
+      } else {
+        unsupported.push(line)
+      }
+    }
+
+    const source: GedcomSource = {
+      id: generateUUID(),
+      title,
+      source_type: ['document', 'book', 'oral_history', 'website', 'photo', 'other'].includes(sourceType)
+        ? sourceType
+        : 'other',
+      author: author || null,
+      publisher: publisher || null,
+      publication_date: publicationDate || null,
+      url: url || null,
+      repository: repository || null,
+      note: [note, ...unsupported.map((line) => `GEDCOM: ${line}`)]
+        .filter(Boolean)
+        .join('\n') || null
+    }
+    parsedSources.set(record.id, source)
+    sources.push(source)
+  }
 
   // Parse Individuals
   for (const record of records.filter((r) => r.type === 'INDI')) {
@@ -312,6 +467,16 @@ export function parseGedcom(gedcom: string): {
     let death_year = null
     let note = ''
 
+    const sourceCitations: {
+      sourceRef: string
+      sourceValue: string
+      page: string
+      quotation: string
+      confidence: string
+      field: string
+    }[] = []
+    let currentCitation: (typeof sourceCitations)[number] | null = null
+
     let currentTag = ''
 
     for (let i = 0; i < record.lines.length; i++) {
@@ -324,6 +489,10 @@ export function parseGedcom(gedcom: string): {
       const val = match[3] || ''
 
       if (level === 1) {
+        if (currentCitation) {
+          sourceCitations.push(currentCitation)
+          currentCitation = null
+        }
         currentTag = tag
         if (tag === 'NAME') {
           fullName = val.replace(/\//g, '').trim()
@@ -334,9 +503,39 @@ export function parseGedcom(gedcom: string): {
           is_deceased = val.trim().length === 0 || val === 'Y'
         } else if (tag === 'NOTE') {
           note = val
+        } else if (tag === 'SOUR') {
+          currentCitation = {
+            sourceRef: val.replace(/@/g, ''),
+            sourceValue: val,
+            page: '',
+            quotation: '',
+            confidence: '',
+            field: ''
+          }
         }
       } else if (level === 2) {
-        if (currentTag === 'NOTE' && tag === 'CONT') {
+        if (tag === 'SOUR') {
+          if (currentCitation) sourceCitations.push(currentCitation)
+          currentCitation = {
+            sourceRef: val.replace(/@/g, ''),
+            sourceValue: val,
+            page: '',
+            quotation: '',
+            confidence: '',
+            field:
+              currentTag === 'BIRT'
+                ? 'birth_date'
+                : currentTag === 'DEAT'
+                  ? 'death_date'
+                  : ''
+          }
+        } else if (currentCitation && tag === 'PAGE') {
+          currentCitation.page = val
+        } else if (currentCitation && tag === '_FIELD') {
+          currentCitation.field = val
+        } else if (currentCitation && tag === '_CONF') {
+          currentCitation.confidence = val
+        } else if (currentTag === 'NOTE' && tag === 'CONT') {
           note += '\n' + val
         } else if (currentTag === 'BIRT' && tag === 'DATE') {
           const cleanVal = val.replace(/^(ABT|EST|AFT|BEF|CAL)\s+/i, '')
@@ -366,7 +565,50 @@ export function parseGedcom(gedcom: string): {
             death_year = parseInt(parts[1]) || null
           }
         }
+      } else if (currentCitation && tag === 'PAGE') {
+        currentCitation.page = val
+      } else if (currentCitation && tag === 'TEXT') {
+        currentCitation.quotation = val
+      } else if (currentCitation && tag === 'CONT') {
+        currentCitation.quotation += `\n${val}`
       }
+    }
+
+    if (currentCitation) sourceCitations.push(currentCitation)
+
+    for (const citation of sourceCitations) {
+      let source = parsedSources.get(citation.sourceRef)
+      if (!source) {
+        const sourceValue = citation.sourceValue.trim()
+        const isXref = /^@[^@]+@$/.test(sourceValue)
+        const fallbackKey = `${isXref ? 'xref' : 'inline'}:${sourceValue}`
+        source = fallbackSources.get(fallbackKey)
+        if (!source) {
+          source = {
+            id: generateUUID(),
+            title: isXref
+              ? `Nguồn GEDCOM không tồn tại: ${citation.sourceRef}`
+              : sourceValue || 'Nguồn GEDCOM không xác định',
+            source_type: 'other',
+            note: `GEDCOM: 1 SOUR${sourceValue ? ` ${sourceValue}` : ''}`
+          }
+          fallbackSources.set(fallbackKey, source)
+          sources.push(source)
+        }
+      }
+      personCitations.push({
+        id: generateUUID(),
+        person_id: uuid,
+        source_id: source.id,
+        field_name: ['birth_date', 'death_date', 'relationship', 'note', 'other'].includes(citation.field)
+          ? citation.field
+          : null,
+        page_reference: citation.page || null,
+        quotation: citation.quotation || null,
+        confidence: ['primary', 'secondary', 'uncertain'].includes(citation.confidence)
+          ? citation.confidence
+          : 'uncertain'
+      })
     }
 
     persons.push({
@@ -447,5 +689,10 @@ export function parseGedcom(gedcom: string): {
     }
   }
 
-  return { persons, relationships: uniqueRelationships }
+  return {
+    persons,
+    relationships: uniqueRelationships,
+    sources,
+    person_citations: personCitations
+  }
 }

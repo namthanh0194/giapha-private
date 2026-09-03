@@ -1,23 +1,20 @@
 'use server'
 
 import { getIsAdmin } from '@/utils/supabase/queries'
+import { toPublicError } from '@/utils/errors'
+import { withTelemetry } from '@/utils/telemetry'
+import {
+  MIGRATION_CATALOG,
+  readMigrationContent
+} from '@/utils/migrations/catalog'
 import packageJson from '@/package.json'
 import postgres from 'postgres'
-import { promises as fs } from 'node:fs'
 import path from 'node:path'
 
 const SOURCE_REPOSITORY = 'homielab/giapha-os'
 const SOURCE_BRANCH = 'main'
 const SOURCE_README_URL = `https://github.com/${SOURCE_REPOSITORY}/blob/${SOURCE_BRANCH}/README.md#hướng-dẫn-cập-nhật-source-code`
 const SOURCE_PACKAGE_URL = `https://raw.githubusercontent.com/${SOURCE_REPOSITORY}/${SOURCE_BRANCH}/package.json`
-
-const MIGRATION_FILES = [
-  'docs/schema.sql',
-  'docs/migrations/20260312015736_add_lunar_death_date.sql',
-  'docs/migrations/20260320230020_add_editor_permission.sql',
-  'docs/migrations/20260524125731_add_gallery.sql',
-  'docs/migrations/20260831140135_security_and_approval_hardening.sql'
-] as const
 
 const MIGRATION_TABLE = 'public.app_migrations'
 
@@ -31,6 +28,7 @@ export interface MigrationStatus {
   configured: boolean
   databaseReachable: boolean
   error?: string
+  errorId?: string
   source: SourceVersionStatus
   migrations: Array<{
     id: string
@@ -47,6 +45,7 @@ export interface SourceVersionStatus {
   latestVersion: string | null
   readmeUrl: string
   error?: string
+  errorId?: string
 }
 
 interface ParsedVersion {
@@ -81,112 +80,125 @@ function compareVersions(left: ParsedVersion, right: ParsedVersion) {
   if (!left.prerelease.length) return 1
   if (!right.prerelease.length) return -1
 
-  const length = Math.max(left.prerelease.length, right.prerelease.length)
-  for (let index = 0; index < length; index += 1) {
-    const leftPart = left.prerelease[index]
-    const rightPart = right.prerelease[index]
-    if (leftPart === undefined) return -1
-    if (rightPart === undefined) return 1
-    if (leftPart === rightPart) continue
+  const minLength = Math.min(left.prerelease.length, right.prerelease.length)
+  for (let i = 0; i < minLength; i++) {
+    const lPart = left.prerelease[i]
+    const rPart = right.prerelease[i]
+    const lNum = Number(lPart)
+    const rNum = Number(rPart)
+    const lIsNum = !Number.isNaN(lNum)
+    const rIsNum = !Number.isNaN(rNum)
 
-    const leftNumber = /^\d+$/.test(leftPart) ? Number(leftPart) : null
-    const rightNumber = /^\d+$/.test(rightPart) ? Number(rightPart) : null
-    if (leftNumber !== null && rightNumber !== null) {
-      return leftNumber > rightNumber ? 1 : -1
+    if (lIsNum && rIsNum) {
+      if (lNum !== rNum) return lNum > rNum ? 1 : -1
+    } else if (lIsNum) {
+      return -1
+    } else if (rIsNum) {
+      return 1
+    } else if (lPart !== rPart) {
+      return lPart.localeCompare(rPart) > 0 ? 1 : -1
     }
-    if (leftNumber !== null) return -1
-    if (rightNumber !== null) return 1
-    return leftPart > rightPart ? 1 : -1
   }
 
-  return 0
+  if (left.prerelease.length === right.prerelease.length) return 0
+  return left.prerelease.length > right.prerelease.length ? 1 : -1
 }
 
 export async function getSourceVersionStatus(): Promise<SourceVersionStatus> {
-  const currentVersion = parseVersion(packageJson.version)
-  const currentVersionLabel =
-    typeof packageJson.version === 'string' ? packageJson.version : null
+  const currentVersion =
+    typeof packageJson?.version === 'string' ? packageJson.version : null
+  const parsedCurrent = parseVersion(currentVersion)
 
   try {
     const response = await fetch(SOURCE_PACKAGE_URL, {
-      next: { revalidate: 300 }
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'giapha-os-migration-checker'
+      }
     })
 
     if (!response.ok) {
-      throw new Error(`GitHub returned ${response.status}`)
+      return {
+        state: 'unknown',
+        currentVersion,
+        latestVersion: null,
+        readmeUrl: SOURCE_README_URL,
+        error: `Không thể kiểm tra version source code trên GitHub (HTTP ${response.status}).`
+      }
     }
 
-    const data = (await response.json()) as { version?: unknown }
-    const latestVersionLabel =
-      typeof data.version === 'string' ? data.version : null
-    const latestVersion = parseVersion(data.version)
+    const latestPackage = (await response.json()) as { version?: unknown }
+    const latestVersion =
+      typeof latestPackage?.version === 'string' ? latestPackage.version : null
+    const parsedLatest = parseVersion(latestVersion)
 
-    if (!latestVersion || !latestVersionLabel) {
-      throw new Error('GitHub package.json did not include a valid version.')
+    if (!parsedCurrent || !parsedLatest) {
+      return {
+        state: 'unknown',
+        currentVersion,
+        latestVersion,
+        readmeUrl: SOURCE_README_URL,
+        error:
+          'Không xác định được version hợp lệ để so sánh giữa source local và GitHub.'
+      }
     }
 
-    const comparison = currentVersion
-      ? compareVersions(currentVersion, latestVersion)
-      : null
+    const comparison = compareVersions(parsedCurrent, parsedLatest)
+    if (comparison < 0) {
+      return {
+        state: 'outdated',
+        currentVersion,
+        latestVersion,
+        readmeUrl: SOURCE_README_URL
+      }
+    }
 
     return {
-      state:
-        comparison === null
-          ? 'unknown'
-          : comparison < 0
-            ? 'outdated'
-            : 'current',
-      currentVersion: currentVersionLabel,
-      latestVersion: latestVersionLabel,
-      readmeUrl: SOURCE_README_URL,
-      ...(comparison !== null
-        ? {}
-        : { error: 'Không xác định được version trong package.json hiện tại.' })
+      state: 'current',
+      currentVersion,
+      latestVersion,
+      readmeUrl: SOURCE_README_URL
     }
   } catch (error) {
-    console.error('Cannot inspect source version:', error)
+    const publicError = toPublicError(
+      error,
+      'Không thể kiểm tra version source code trên GitHub.',
+      { event: 'migrations.source_check.failed' }
+    )
     return {
       state: 'unknown',
-      currentVersion: currentVersionLabel,
+      currentVersion,
       latestVersion: null,
       readmeUrl: SOURCE_README_URL,
-      error: 'Không thể kiểm tra version source code trên GitHub.'
+      error: publicError.message,
+      errorId: publicError.id
     }
   }
 }
 
 async function getMigrationDefinitions(): Promise<MigrationDefinition[]> {
   return Promise.all(
-    MIGRATION_FILES.map(async (file) => ({
-      id: file,
+    MIGRATION_CATALOG.map(async (file) => ({
+      id: path.basename(file, '.sql'),
       file,
-      sql: await fs.readFile(
-        file === 'docs/schema.sql'
-          ? path.join(process.cwd(), 'docs', 'schema.sql')
-          : path.join(process.cwd(), 'docs', 'migrations', path.basename(file)),
-        'utf8'
-      )
+      sql: await readMigrationContent(file)
     }))
   )
 }
 
 function createDatabaseClient() {
-  const databaseUrl = process.env.SUPABASE_DB_URL?.trim()
+  const databaseUrl = process.env.SUPABASE_DB_URL
   if (!databaseUrl) return null
-
-  if (!/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
-    throw new Error('SUPABASE_DB_URL must be a PostgreSQL connection string.')
-  }
 
   return postgres(databaseUrl, {
     max: 1,
-    connect_timeout: 10,
-    idle_timeout: 5,
-    prepare: false
+    connect_timeout: 5,
+    idle_timeout: 5
   })
 }
 
-async function ensureMigrationTable(sql: ReturnType<typeof postgres>) {
+async function ensureMigrationTable(sql: postgres.Sql) {
   await sql.unsafe(`
     CREATE TABLE IF NOT EXISTS ${MIGRATION_TABLE} (
       migration_id TEXT PRIMARY KEY,
@@ -200,19 +212,15 @@ async function ensureMigrationTable(sql: ReturnType<typeof postgres>) {
 
 export async function getMigrationStatus(): Promise<MigrationStatus> {
   const isAdmin = await getIsAdmin()
+  const source = await getSourceVersionStatus()
   const definitions = await getMigrationDefinitions()
 
   if (!isAdmin) {
     return {
-      configured: Boolean(process.env.SUPABASE_DB_URL),
+      configured: false,
       databaseReachable: false,
       error: 'Từ chối truy cập.',
-      source: {
-        state: 'unknown',
-        currentVersion: null,
-        latestVersion: null,
-        readmeUrl: SOURCE_README_URL
-      },
+      source,
       migrations: definitions.map(({ id, file }) => ({
         id,
         file,
@@ -220,8 +228,6 @@ export async function getMigrationStatus(): Promise<MigrationStatus> {
       }))
     }
   }
-
-  const source = await getSourceVersionStatus()
 
   const sql = createDatabaseClient()
   if (!sql) {
@@ -266,11 +272,16 @@ export async function getMigrationStatus(): Promise<MigrationStatus> {
       }))
     }
   } catch (error) {
-    console.error('Cannot inspect migration status:', error)
+    const publicError = toPublicError(
+      error,
+      'Không thể kết nối hoặc đọc trạng thái migration.',
+      { event: 'migrations.status_read.failed' }
+    )
     return {
       configured: true,
       databaseReachable: false,
-      error: 'Không thể kết nối hoặc đọc trạng thái migration.',
+      error: publicError.message,
+      errorId: publicError.id,
       source,
       migrations: definitions.map(({ id, file }) => ({
         id,
@@ -284,6 +295,7 @@ export async function getMigrationStatus(): Promise<MigrationStatus> {
 }
 
 export async function runPendingMigrations() {
+  return await withTelemetry('migrations.run_pending', { route: '/actions/migrations', roleClass: 'admin' }, async (scope) => {
   const isAdmin = await getIsAdmin()
   if (!isAdmin) return { success: false, error: 'Từ chối truy cập.' }
 
@@ -340,14 +352,16 @@ export async function runPendingMigrations() {
           `
           appliedNow.push(migration.file)
         } catch (error) {
-          console.error(`Migration failed: ${migration.file}`, error)
-          throw new Error(`Migration failed: ${migration.file}`)
+          throw new Error(`Migration failed: ${migration.file}`, {
+            cause: error
+          })
         }
       }
 
       return appliedNow
     })
 
+    scope.add({ rowCount: result.length })
     return {
       success: true,
       applied: result,
@@ -356,15 +370,20 @@ export async function runPendingMigrations() {
         : 'Database đã ở phiên bản mới nhất.'
     }
   } catch (error) {
-    console.error('Cannot run pending migrations:', error)
+    const fallback =
+      error instanceof Error && error.message.startsWith('Migration failed:')
+        ? `Không thể chạy ${error.message.replace('Migration failed: ', '')}.`
+        : 'Không thể chạy migration. Kiểm tra SUPABASE_DB_URL và log server.'
+    const publicError = toPublicError(error, fallback, {
+      event: 'migrations.execution.failed'
+    })
     return {
       success: false,
-      error:
-        error instanceof Error && error.message.startsWith('Migration failed:')
-          ? `Không thể chạy ${error.message.replace('Migration failed: ', '')}.`
-          : 'Không thể chạy migration. Kiểm tra SUPABASE_DB_URL và log server.'
+      error: publicError.message,
+      errorId: publicError.id
     }
   } finally {
     await sql.end({ timeout: 5 })
   }
+  })
 }

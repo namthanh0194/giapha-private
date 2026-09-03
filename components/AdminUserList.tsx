@@ -432,9 +432,9 @@ export default function AdminUserList({
                     type='password'
                     name='password'
                     required
-                    minLength={6}
+                    minLength={8}
                     className='w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 transition-colors focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none sm:py-2.5'
-                    placeholder='Ít nhất 6 ký tự'
+                    placeholder='Ít nhất 8 ký tự'
                   />
                 </div>
 

@@ -1,4 +1,5 @@
 import KinshipFinder from '@/components/KinshipFinder'
+import { fetchAllRows } from '@/utils/supabase/pagination'
 import { getSupabase } from '@/utils/supabase/queries'
 
 export const metadata = {
@@ -8,16 +9,27 @@ export const metadata = {
 export default async function KinshipPage() {
   const supabase = await getSupabase()
 
-  const { data: persons } = await supabase
-    .from('persons')
-    .select(
-      'id, full_name, gender, birth_year, birth_order, generation, is_in_law, avatar_url'
-    )
-    .order('birth_year', { ascending: true, nullsFirst: false })
-
-  const { data: relationships } = await supabase
-    .from('relationships')
-    .select('type, person_a, person_b')
+  const [persons, relationships] = await Promise.all([
+    fetchAllRows(async (from, to) => {
+      const { data, error } = await supabase
+        .from('persons')
+        .select(
+          'id, full_name, gender, birth_year, birth_order, generation, is_in_law, avatar_url'
+        )
+        .order('birth_year', { ascending: true, nullsFirst: false })
+        .order('id', { ascending: true })
+        .range(from, to)
+      return { data, error }
+    }),
+    fetchAllRows(async (from, to) => {
+      const { data, error } = await supabase
+        .from('relationships')
+        .select('type, person_a, person_b')
+        .order('id', { ascending: true })
+        .range(from, to)
+      return { data, error }
+    })
+  ])
 
   return (
     <div className='relative flex w-full flex-1 flex-col pb-12'>
@@ -29,10 +41,7 @@ export default async function KinshipPage() {
       </div>
 
       <main className='mx-auto w-full max-w-3xl flex-1 px-4 sm:px-6 lg:px-8'>
-        <KinshipFinder
-          persons={persons ?? []}
-          relationships={relationships ?? []}
-        />
+        <KinshipFinder persons={persons} relationships={relationships} />
       </main>
     </div>
   )

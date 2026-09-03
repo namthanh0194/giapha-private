@@ -59,7 +59,7 @@ export default function GalleryClient({
           <div className='flex items-center rounded-xl border border-stone-200/60 bg-stone-100 p-1'>
             <button
               onClick={() => setViewMode('grid')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+              className={`flex min-h-11 min-w-11 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
                 viewMode === 'grid'
                   ? 'bg-white text-stone-900 shadow-xs'
                   : 'text-stone-500 hover:text-stone-800'
@@ -70,7 +70,7 @@ export default function GalleryClient({
             </button>
             <button
               onClick={() => setViewMode('timeline')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+              className={`flex min-h-11 min-w-11 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
                 viewMode === 'timeline'
                   ? 'bg-white text-stone-900 shadow-xs'
                   : 'text-stone-500 hover:text-stone-800'

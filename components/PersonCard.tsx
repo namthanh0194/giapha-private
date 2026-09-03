@@ -25,6 +25,7 @@ export default function PersonCard({ person }: PersonCardProps) {
 
   return (
     <button
+      type='button'
       onClick={() => setMemberModalId(person.id)}
       className={`group relative block overflow-hidden rounded-3xl border border-border bg-white/60 p-2 transition-all duration-300 hover:-translate-y-1 hover:border-tertiary hover:bg-surface/90 sm:p-4 ${isDeceased ? 'grayscalePer-[0.3] opacity-80' : ''}`}>
       {/* Decorative gradient blob */}
@@ -53,9 +54,9 @@ export default function PersonCard({ person }: PersonCardProps) {
           <div
             className={`absolute right-0 bottom-0 flex size-5 items-center justify-center rounded-full shadow-sm ring-2 ring-white ${getGenderStyle(person.gender)}`}>
             {person.gender === 'male' ? (
-              <MaleIcon className='size-5' />
+              <MaleIcon className='size-5' aria-hidden='true' />
             ) : person.gender === 'female' ? (
-              <FemaleIcon className='size-5' />
+              <FemaleIcon className='size-5' aria-hidden='true' />
             ) : null}
           </div>
         </div>
@@ -69,7 +70,8 @@ export default function PersonCard({ person }: PersonCardProps) {
               className='size-4 shrink-0 text-stone-400'
               fill='none'
               viewBox='0 0 24 24'
-              stroke='currentColor'>
+              stroke='currentColor'
+              aria-hidden='true'>
               <path
                 strokeLinecap='round'
                 strokeLinejoin='round'

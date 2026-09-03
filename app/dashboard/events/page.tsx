@@ -1,7 +1,8 @@
 import { MemberListProvider } from '@/context/MemberListContext'
 import EventsList from '@/components/EventsList'
 import MemberDetailModal from '@/components/modal/MemberDetailModal'
-import { getSupabase } from '@/utils/supabase/queries'
+import { fetchAllRows } from '@/utils/supabase/pagination'
+import { getProfile, getSupabase } from '@/utils/supabase/queries'
 
 export const metadata = {
   title: 'Sự kiện gia phả'
@@ -9,20 +10,31 @@ export const metadata = {
 
 export default async function EventsPage() {
   const supabase = await getSupabase()
+  const profile = await getProfile()
+  const canEdit =
+    profile?.is_active === true &&
+    (profile.role === 'admin' || profile.role === 'editor')
 
-  const [personsRes, customEventsRes] = await Promise.all([
-    supabase
-      .from('persons')
-      .select(
-        'id, full_name, birth_year, birth_month, birth_day, death_year, death_month, death_day, death_lunar_year, death_lunar_month, death_lunar_day, is_deceased, avatar_url'
-      ),
-    supabase
-      .from('custom_events')
-      .select('id, name, content, event_date, location, created_by')
+  const [persons, customEvents] = await Promise.all([
+    fetchAllRows(async (from, to) => {
+      const { data, error } = await supabase
+        .from('persons')
+        .select(
+          'id, full_name, birth_year, birth_month, birth_day, death_year, death_month, death_day, death_lunar_year, death_lunar_month, death_lunar_day, is_deceased'
+        )
+        .order('id', { ascending: true })
+        .range(from, to)
+      return { data, error }
+    }),
+    fetchAllRows(async (from, to) => {
+      const { data, error } = await supabase
+        .from('custom_events')
+        .select('id, version, name, content, event_date, location, created_by')
+        .order('id', { ascending: true })
+        .range(from, to)
+      return { data, error }
+    })
   ])
-
-  const persons = personsRes.data || []
-  const customEvents = customEventsRes.data || []
 
   return (
     <MemberListProvider>
@@ -36,8 +48,9 @@ export default async function EventsPage() {
 
         <main className='mx-auto w-full max-w-3xl flex-1 px-4 sm:px-6 lg:px-8'>
           <EventsList
-            persons={persons ?? []}
-            customEvents={customEvents ?? []}
+            persons={persons}
+            customEvents={customEvents}
+            canEdit={canEdit}
           />
         </main>
       </div>

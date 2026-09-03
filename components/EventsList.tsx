@@ -39,6 +39,7 @@ interface EventsListProps {
     is_deceased: boolean
   }[]
   customEvents?: CustomEventRecord[]
+  canEdit?: boolean
 }
 
 const DAY_LABELS: Record<string, string> = {
@@ -63,10 +64,12 @@ function daysUntilLabel(days: number): string {
 function EventCard({
   event,
   index,
+  canEdit = true,
   onEditCustomEvent
 }: {
   event: FamilyEvent
   index: number
+  canEdit?: boolean
   onEditCustomEvent: (e: FamilyEvent) => void
 }) {
   const isBirthday = event.type === 'birthday'
@@ -77,7 +80,9 @@ function EventCard({
 
   const { setMemberModalId } = useMemberListView()
 
+  const isClickable = !isCustom || canEdit
   const handleClick = () => {
+    if (!isClickable) return
     if (isCustom) {
       onEditCustomEvent(event)
     } else if (event.personId) {
@@ -128,7 +133,9 @@ function EventCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.04 }}
       onClick={handleClick}
-      className={`group flex w-full cursor-pointer items-start gap-3 rounded-2xl border p-3.5 text-left transition-all active:scale-[0.98] sm:gap-4 sm:p-4 ${
+      className={`group flex w-full items-start gap-3 rounded-2xl border p-3.5 text-left transition-all sm:gap-4 sm:p-4 ${
+        isClickable ? 'cursor-pointer active:scale-[0.98]' : 'cursor-default'
+      } ${
         isToday
           ? 'border-amber-300 bg-amber-50'
           : isPast
@@ -231,7 +238,8 @@ function EventCard({
 
 export default function EventsList({
   persons,
-  customEvents = []
+  customEvents = [],
+  canEdit = true
 }: EventsListProps) {
   const router = useRouter()
   const [filter, setFilter] = useState<
@@ -376,12 +384,12 @@ export default function EventsList({
           </div>
         </div>
 
-        <button
+        {canEdit && <button
           onClick={handleOpenCreateModal}
           className='btn-primary relative z-10 w-full sm:w-auto'>
           <Plus className='size-5 text-stone-300' />
           <span>Thêm sự kiện</span>
-        </button>
+        </button>}
       </motion.div>
 
       {/* Controls */}
@@ -450,6 +458,7 @@ export default function EventsList({
               key={`${event.personId}-${event.type}-${event.eventDateLabel}`}
               event={event}
               index={i}
+              canEdit={canEdit}
               onEditCustomEvent={handleOpenEditModal}
             />
           ))}
@@ -465,12 +474,13 @@ export default function EventsList({
         </button>
       )}
 
-      <CustomEventModal
+      {canEdit && <CustomEventModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={handleModalSuccess}
         eventToEdit={editingCustomEvent}
-      />
+        canEdit={canEdit}
+      />}
     </div>
   )
 }

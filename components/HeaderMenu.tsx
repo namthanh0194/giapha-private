@@ -4,9 +4,11 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   BarChart2,
   ChevronDown,
+  ClipboardCheck,
   Database,
   ArrowUpCircle,
   GitMerge,
+  History,
   Info,
   Network,
   UserCircle,
@@ -18,7 +20,7 @@ import LogoutButton from './LogoutButton'
 import { useUser } from './UserProvider'
 
 export default function HeaderMenu() {
-  const { user, isAdmin } = useUser()
+  const { user, isAdmin, isEditor } = useUser()
   const userEmail = user?.email
   const [isOpen, setIsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -100,6 +102,24 @@ export default function HeaderMenu() {
                 <BarChart2 className='size-4' />
                 Thống kê
               </Link>
+
+              <Link
+                href='/dashboard/activity'
+                onClick={() => setIsOpen(false)}
+                className='flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-stone-700 transition-colors hover:bg-amber-50 hover:text-amber-700'>
+                <History className='size-4' />
+                Lịch sử hoạt động
+              </Link>
+
+              {isEditor && (
+                <Link
+                  href='/dashboard/reviews'
+                  onClick={() => setIsOpen(false)}
+                  className='flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-stone-700 transition-colors hover:bg-amber-50 hover:text-amber-700'>
+                  <ClipboardCheck className='size-4' />
+                  Rà soát đóng góp
+                </Link>
+              )}
 
               {isAdmin && (
                 <>

@@ -1,12 +1,18 @@
-'use client'
+﻿'use client'
 
+import {
+  createChildrenAction,
+  createRelationshipAction,
+  createSpouseAction,
+  deleteRelationshipAction,
+  updateMemberAction
+} from '@/app/actions/member'
 import {
   MemberListContext,
   useMemberListView
 } from '@/context/MemberListContext'
 import { Person, RelationshipType } from '@/types'
 import { getAvatarUrl } from '@/utils/avatar'
-import { formatDisplayDate } from '@/utils/dateHelpers'
 import { getAvatarBg } from '@/utils/styleHelprs'
 import { createClient } from '@/utils/supabase/client'
 import Image from 'next/image'
@@ -31,6 +37,7 @@ interface RelationshipManagerProps {
 
 interface EnrichedRelationship {
   id: string
+  version: number
   type: RelationshipType
   direction: 'parent' | 'child' | 'spouse' | 'child_in_law'
   targetPerson: Person
@@ -73,7 +80,6 @@ export default function RelationshipManager({
   const [newRelNote, setNewRelNote] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState<Person[]>([])
-  const [recentMembers, setRecentMembers] = useState<Person[]>([])
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -133,6 +139,7 @@ export default function RelationshipManager({
 
         formattedRels.push({
           id: r.id,
+          version: r.version ?? 1,
           type: r.type,
           direction,
           targetPerson: r.target,
@@ -149,6 +156,7 @@ export default function RelationshipManager({
 
         formattedRels.push({
           id: r.id,
+          version: r.version ?? 1,
           type: r.type,
           direction,
           targetPerson: r.target,
@@ -191,6 +199,7 @@ export default function RelationshipManager({
 
               formattedRels.push({
                 id: m.id + '_inlaw',
+                version: m.version ?? 1,
                 type: 'marriage',
                 direction: 'child_in_law',
                 targetPerson: spousePerson,
@@ -279,44 +288,32 @@ export default function RelationshipManager({
     return () => window.clearTimeout(timeoutId)
   }, [fetchRelationships])
 
-  // Search for people to add
+  // Search only with debounced fetch and AbortController
   useEffect(() => {
-    const searchPeople = async () => {
-      if (searchTerm.length < 2) {
-        setSearchResults([])
-        return
+    if (searchTerm.trim().length < 2) return
+
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/search/persons?q=${encodeURIComponent(searchTerm.trim())}&limit=20`,
+          { signal: controller.signal }
+        )
+        if (!response.ok) return
+        const payload = (await response.json()) as { persons: Person[] }
+        setSearchResults((payload.persons ?? []).filter((p) => p.id !== personId))
+      } catch (error) {
+        if ((error as DOMException).name !== 'AbortError') {
+          setSearchResults([])
+        }
       }
+    }, 275)
 
-      const { data } = await supabase
-        .from('persons')
-        .select('*')
-        .ilike('full_name', `%${searchTerm}%`)
-        .neq('id', personId) // Exclude self
-        .limit(5)
-
-      if (data) setSearchResults(data)
+    return () => {
+      window.clearTimeout(timeoutId)
+      controller.abort()
     }
-
-    const timeoutId = setTimeout(searchPeople, 300)
-    return () => clearTimeout(timeoutId)
-  }, [searchTerm, personId, supabase])
-
-  // Fetch recent members when opening Add form
-  useEffect(() => {
-    if (isAdding && recentMembers.length === 0) {
-      const fetchRecent = async () => {
-        const { data } = await supabase
-          .from('persons')
-          .select('*')
-          .neq('id', personId)
-          .order('created_at', { ascending: false })
-          .limit(10)
-        if (data) setRecentMembers(data)
-      }
-      fetchRecent()
-    }
-  }, [isAdding, personId, supabase, recentMembers.length])
-
+  }, [searchTerm, personId])
   const handleAddRelationship = async () => {
     if (!selectedTargetId) return
     setProcessing(true)
@@ -349,20 +346,19 @@ export default function RelationshipManager({
       if (newRelDirection === 'spouse') type = 'marriage'
       else if (newRelType === 'adopted_child') type = 'adopted_child'
 
-      const { error } = await supabase.from('relationships').insert({
-        person_a: personA,
-        person_b: personB,
-        type: type,
-        note: newRelNote ? newRelNote : null
-      })
-
-      if (error) throw error
+      const relationshipResult = await createRelationshipAction(
+        personA,
+        personB,
+        type,
+        newRelNote || null
+      )
+      if (!relationshipResult.success) throw new Error(relationshipResult.error)
 
       // Auto-update target person generation and is_in_law if currently missing
       try {
         const { data: targetPerson } = await supabase
           .from('persons')
-          .select('generation, is_in_law')
+          .select('version, generation, is_in_law')
           .eq('id', selectedTargetId)
           .single()
 
@@ -389,10 +385,12 @@ export default function RelationshipManager({
           }
 
           if (Object.keys(updates).length > 0) {
-            await supabase
-              .from('persons')
-              .update(updates)
-              .eq('id', selectedTargetId)
+            const result = await updateMemberAction(
+              selectedTargetId,
+              targetPerson.version ?? 1,
+              updates
+            )
+            if (!result.success) throw new Error(result.error)
           }
         }
       } catch (err) {
@@ -425,93 +423,39 @@ export default function RelationshipManager({
 
     setProcessing(true)
     setError(null)
-    let successCount = 0
-
     try {
-      // For each child row, insert a Person, then insert Relationship(s)
-      for (let i = 0; i < validChildren.length; i++) {
-        const child = validChildren[i]
-
-        // 1. Insert Person
-        const personPayload: {
-          full_name: string
-          gender: 'male' | 'female' | 'other'
-          birth_year?: number
-          birth_order?: number
-          is_in_law?: boolean
-          generation?: number
-        } = {
-          full_name: child.name.trim(),
-          gender: child.gender,
-          is_in_law: false
-        }
-
-        if (person.generation != null) {
-          personPayload.generation = person.generation + 1
-        }
-        if (child.birthYear.trim() !== '') {
-          const year = parseInt(child.birthYear)
-          if (!isNaN(year)) personPayload.birth_year = year
-        }
-        if (child.birthOrder.trim() !== '') {
-          const order = parseInt(child.birthOrder)
-          if (!isNaN(order)) personPayload.birth_order = order
-        }
-
-        const { data: newPersonData, error: insertError } = await supabase
-          .from('persons')
-          .insert(personPayload)
-          .select('id')
-          .single()
-
-        if (insertError || !newPersonData) {
-          console.error('Error inserting child:', child.name, insertError)
-          continue // Skip setting relationships for this if person insert failed
-        }
-
-        const newChildId = newPersonData.id
-
-        // 2. Insert Relationship to Main Person (parent)
-        await supabase.from('relationships').insert({
-          person_a: personId,
-          person_b: newChildId,
-          type: 'biological_child'
-        })
-
-        // 3. Insert Relationship to Second Parent (spouse), if selected
-        if (selectedSpouseId && selectedSpouseId !== 'unknown') {
-          await supabase.from('relationships').insert({
-            person_a: selectedSpouseId,
-            person_b: newChildId,
-            type: 'biological_child'
-          })
-        }
-
-        successCount++
+      const parentIds = [personId]
+      if (selectedSpouseId && selectedSpouseId !== 'unknown') {
+        parentIds.push(selectedSpouseId)
       }
+      const children = validChildren.map((child) => ({
+        full_name: child.name.trim(),
+        gender: child.gender,
+        birth_year: child.birthYear.trim()
+          ? Number.parseInt(child.birthYear, 10)
+          : null,
+        birth_order: child.birthOrder.trim()
+          ? Number.parseInt(child.birthOrder, 10)
+          : null,
+        generation:
+          person.generation != null ? person.generation + 1 : null
+      }))
+      const result = await createChildrenAction(parentIds, children)
+      if ('error' in result) throw new Error(result.error)
 
-      if (successCount === validChildren.length) {
-        setIsAddingBulk(false)
-        setBulkChildren([
-          {
-            name: '',
-            gender: 'male',
-            birthYear: '',
-            birthOrder: '1',
-            isProcessing: false
-          }
-        ])
-        setSelectedSpouseId('')
-        fetchRelationships()
-        router.refresh()
-      } else {
-        setError(
-          `Đã xảy ra lỗi. Chỉ lưu thành công ${successCount}/${validChildren.length} người.`
-        )
-        setTimeout(() => setError(null), 5000)
-        fetchRelationships()
-        router.refresh()
-      }
+      setIsAddingBulk(false)
+      setBulkChildren([
+        {
+          name: '',
+          gender: 'male',
+          birthYear: '',
+          birthOrder: '1',
+          isProcessing: false
+        }
+      ])
+      setSelectedSpouseId('')
+      fetchRelationships()
+      router.refresh()
     } catch (err: unknown) {
       const e = err as Error
       setError('Không thể thêm danh sách con: ' + e.message)
@@ -561,26 +505,12 @@ export default function RelationshipManager({
         if (!isNaN(year)) personPayload.birth_year = year
       }
 
-      // 1. Insert Person
-      const { data: newPersonData, error: insertError } = await supabase
-        .from('persons')
-        .insert(personPayload)
-        .select('id')
-        .single()
-
-      if (insertError || !newPersonData) throw insertError
-
-      const newSpouseId = newPersonData.id
-
-      // 2. Insert Marriage Relationship
-      const { error: relError } = await supabase.from('relationships').insert({
-        person_a: personId,
-        person_b: newSpouseId,
-        type: 'marriage',
-        note: newSpouseNote.trim() || null
-      })
-
-      if (relError) throw relError
+      const result = await createSpouseAction(
+        personId,
+        personPayload,
+        newSpouseNote.trim() || null
+      )
+      if ('error' in result) throw new Error(result.error)
 
       setIsAddingSpouse(false)
       setNewSpouseName('')
@@ -597,14 +527,11 @@ export default function RelationshipManager({
     }
   }
 
-  const handleDelete = async (relId: string) => {
+  const handleDelete = async (relId: string, expectedVersion: number) => {
     if (!confirm('Bạn có chắc chắn muốn xóa mối quan hệ này?')) return
     try {
-      const { error } = await supabase
-        .from('relationships')
-        .delete()
-        .eq('id', relId)
-      if (error) throw error
+      const result = await deleteRelationshipAction(relId, expectedVersion)
+      if (!result.success) throw new Error(result.error)
       fetchRelationships()
       router.refresh()
     } catch (err: unknown) {
@@ -712,7 +639,7 @@ export default function RelationshipManager({
                     </button>
                     {canEdit && rel.direction !== 'child_in_law' && (
                       <button
-                        onClick={() => handleDelete(rel.id)}
+                        onClick={() => handleDelete(rel.id, rel.version)}
                         className='ml-2 flex items-center justify-center rounded-lg p-2 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-500 sm:p-2.5'
                         title='Xóa mối quan hệ'
                         aria-label='Xóa mối quan hệ'>
@@ -890,20 +817,12 @@ export default function RelationshipManager({
                 className='block w-full rounded-lg border border-stone-300 bg-white p-2 text-sm text-stone-900 placeholder-stone-400 transition-colors focus:border-amber-500 focus:ring-amber-500 sm:p-2.5'
               />
               {/* Search Results Dropdown */}
-              {(searchResults.length > 0 ||
-                (searchTerm.length === 0 &&
-                  !selectedTargetId &&
-                  recentMembers.length > 0)) && (
+              {searchTerm.trim().length >= 2 && searchResults.length > 0 && (
                 <div className='mt-2 max-h-62.5 overflow-y-auto rounded-md border border-stone-200 bg-white'>
                   <div className='sticky top-0 z-10 border-b border-stone-200 bg-stone-100 px-3 py-1.5 text-sm font-medium text-stone-500'>
-                    {searchResults.length > 0
-                      ? 'Kết quả tìm kiếm'
-                      : 'Thành viên vừa thêm gần đây'}
+                    Kết quả tìm kiếm
                   </div>
-                  {(searchResults.length > 0
-                    ? searchResults
-                    : recentMembers
-                  ).map((p) => (
+                  {searchResults.map((p) => (
                     <button
                       key={p.id}
                       onClick={() => {
@@ -914,29 +833,24 @@ export default function RelationshipManager({
                       className='flex items-center justify-between border-b border-stone-100 px-3 py-2 text-sm last:border-0 hover:bg-amber-50'>
                       <div className='flex items-center gap-2'>
                         <span
-                          className={`flex size-3 shrink-0 items-center justify-center rounded-full text-sm font-medium text-white ${
-                            p.gender === 'male'
-                              ? 'bg-sky-500'
-                              : p.gender === 'female'
-                                ? 'bg-rose-500'
-                                : 'bg-stone-400'
-                          }`}>
+                          className='flex size-3 shrink-0 items-center justify-center rounded-full bg-stone-500 text-sm font-medium text-white'>
                           {p.gender === 'male'
                             ? '♂'
                             : p.gender === 'female'
                               ? '♀'
-                              : '?'}
+                              : '•'}
                         </span>
                         <span className='font-medium text-stone-800'>
                           {p.full_name}
                         </span>
-                      </div>
-                      <span className='text-sm text-stone-400'>
-                        {formatDisplayDate(
-                          p.birth_year,
-                          p.birth_month,
-                          p.birth_day
+                        {p.birth_year && (
+                          <span className='text-sm text-stone-400'>
+                            ({p.birth_year})
+                          </span>
                         )}
+                      </div>
+                      <span className='text-sm font-medium text-amber-600'>
+                        Chọn
                       </span>
                     </button>
                   ))}

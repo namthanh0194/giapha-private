@@ -300,7 +300,7 @@ export default function LoginPage() {
                   href={ssoGuideUrl}
                   target='_blank'
                   rel='noopener noreferrer'
-                  className='mt-2 inline-block font-medium text-amber-900 underline decoration-amber-400 underline-offset-2 hover:text-amber-700'>
+                  className='mt-2 inline-flex min-h-12 items-center font-medium text-amber-900 underline decoration-amber-400 underline-offset-2 hover:text-amber-700'>
                   Xem hướng dẫn cấu hình SSO
                 </a>
               </motion.div>
@@ -425,14 +425,14 @@ export default function LoginPage() {
 
       <Link
         href='/'
-        className='group absolute top-6 left-6 z-20 flex items-center gap-2 rounded-full border border-stone-200 bg-white/60 px-5 py-2.5 text-sm font-medium text-stone-500 transition-all duration-300 hover:border-stone-300 hover:text-stone-900'>
+        className='group absolute top-6 left-6 z-20 flex min-h-11 items-center gap-2 rounded-full border border-stone-200 bg-white/60 px-5 py-2.5 text-sm font-medium text-stone-500 transition-all duration-300 hover:border-stone-300 hover:text-stone-900'>
         <ArrowLeft className='size-4 transition-transform group-hover:-translate-x-1' />
         Trang chủ
       </Link>
 
       <Link
         href='/about'
-        className='group absolute top-6 right-6 z-20 flex items-center gap-2 rounded-full border border-stone-200 bg-white/60 px-5 py-2.5 text-sm font-medium text-stone-500 transition-all duration-300 hover:border-stone-300 hover:text-stone-900'>
+        className='group absolute top-6 right-6 z-20 flex min-h-11 items-center gap-2 rounded-full border border-stone-200 bg-white/60 px-5 py-2.5 text-sm font-medium text-stone-500 transition-all duration-300 hover:border-stone-300 hover:text-stone-900'>
         <Info className='size-4 transition-transform group-hover:scale-110' />
         Giới thiệu
       </Link>

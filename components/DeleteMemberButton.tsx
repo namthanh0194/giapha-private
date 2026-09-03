@@ -7,11 +7,13 @@ import { useState } from 'react'
 
 interface DeleteMemberButtonProps {
   memberId: string
+  expectedVersion?: number
   className?: string
 }
 
 export default function DeleteMemberButton({
   memberId,
+  expectedVersion = 1,
   className = ''
 }: DeleteMemberButtonProps) {
   const [isDeleting, setIsDeleting] = useState(false)
@@ -29,7 +31,7 @@ export default function DeleteMemberButton({
     setIsDeleting(true)
     setError(null)
     try {
-      const result = await deleteMemberProfile(memberId)
+      const result = await deleteMemberProfile(memberId, expectedVersion)
       if (result?.error) {
         setError(result.error)
         setIsDeleting(false)

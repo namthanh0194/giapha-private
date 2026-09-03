@@ -1,25 +1,93 @@
-'use client'
+﻿'use client'
 
 import PersonCard from '@/components/PersonCard'
 import { Person, Relationship } from '@/types'
-import { ArrowUpDown, Filter, Plus, Search } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import {
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  Plus,
+  Search
+} from 'lucide-react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useMemo, useState, useTransition } from 'react'
 import { useMemberListView } from '@/context/MemberListContext'
 
 export default function MemberList({
   initialPersons,
   relationships = [],
-  canEdit = false
+  canEdit = false,
+  pagination
 }: {
   initialPersons: Person[]
   relationships?: Relationship[]
   canEdit?: boolean
+  pagination?: {
+    page: number
+    pageSize: number
+    total: number
+    query: string
+    filter: string
+    sort: string
+  }
 }) {
   const { setShowCreateMember } = useMemberListView()
-  const [searchTerm, setSearchTerm] = useState('')
-  const [sortOption, setSortOption] = useState('generation_asc')
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const [, startTransition] = useTransition()
 
-  const [filterOption, setFilterOption] = useState('all')
+  const [searchTerm, setSearchTerm] = useState(
+    () => pagination?.query ?? searchParams.get('query') ?? ''
+  )
+  const [sortOption, setSortOption] = useState(
+    () => pagination?.sort ?? searchParams.get('sort') ?? 'generation_asc'
+  )
+  const [filterOption, setFilterOption] = useState(
+    () => pagination?.filter ?? searchParams.get('filter') ?? 'all'
+  )
+
+  const currentPage = pagination?.page ?? 1
+  const pageSize = pagination?.pageSize ?? 50
+  const totalCount = pagination?.total ?? initialPersons.length
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+
+  const updateParams = (updates: {
+    query?: string
+    sort?: string
+    filter?: string
+    page?: number
+  }) => {
+    const next = new URLSearchParams(searchParams.toString())
+
+    const nextQuery =
+      updates.query !== undefined
+        ? updates.query.trim().slice(0, 100)
+        : searchTerm.trim().slice(0, 100)
+    const nextFilter =
+      updates.filter !== undefined ? updates.filter : filterOption
+    const nextSort = updates.sort !== undefined ? updates.sort : sortOption
+    const nextPage = updates.page !== undefined ? updates.page : 1
+
+    if (nextQuery) next.set('query', nextQuery)
+    else next.delete('query')
+
+    if (nextFilter && nextFilter !== 'all') next.set('filter', nextFilter)
+    else next.delete('filter')
+
+    if (nextSort && nextSort !== 'generation_asc') next.set('sort', nextSort)
+    else next.delete('sort')
+
+    if (nextPage > 1) next.set('page', String(nextPage))
+    else next.delete('page')
+
+    next.set('view', 'list')
+
+    startTransition(() => {
+      router.push(`${pathname}?${next.toString()}`)
+    })
+  }
 
   const filteredPersons = useMemo(() => {
     return initialPersons.filter((person) => {
@@ -274,9 +342,18 @@ export default function MemberList({
               <input
                 type='text'
                 placeholder='Tìm kiếm thành viên...'
-                className='w-full rounded-xl border border-stone-200/80 bg-white/90 py-2.5 pr-4 pl-10 text-stone-900 placeholder-stone-400 transition-all focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 focus:outline-none'
+                className='w-full rounded-xl border border-stone-200/80 bg-white/90 py-2.5 pr-4 pl-10 text-sm text-stone-900 placeholder-stone-400 transition-all focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 focus:outline-none'
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                maxLength={100}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setSearchTerm(val)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    updateParams({ query: searchTerm, page: 1 })
+                  }
+                }}
               />
             </div>
             <div className='flex w-full flex-col items-center gap-2 sm:w-auto sm:flex-row sm:gap-3'>
@@ -285,7 +362,11 @@ export default function MemberList({
                 <select
                   className='w-full appearance-none rounded-xl border border-stone-200/80 bg-white/90 py-2.5 pr-8 pl-9 text-sm font-medium text-stone-700 transition-all hover:border-amber-300 focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:outline-none sm:w-40'
                   value={filterOption}
-                  onChange={(e) => setFilterOption(e.target.value)}>
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setFilterOption(val)
+                    updateParams({ filter: val, page: 1 })
+                  }}>
                   <option value='all'>Tất cả</option>
                   <option value='male'>Nam</option>
                   <option value='female'>Nữ</option>
@@ -314,7 +395,11 @@ export default function MemberList({
                 <select
                   className='w-full appearance-none rounded-xl border border-stone-200/80 bg-white/90 py-2.5 pr-8 pl-9 text-sm font-medium text-stone-700 transition-all hover:border-amber-300 focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:outline-none sm:w-52'
                   value={sortOption}
-                  onChange={(e) => setSortOption(e.target.value)}>
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setSortOption(val)
+                    updateParams({ sort: val, page: 1 })
+                  }}>
                   <option value='birth_asc'>Năm sinh (Tăng dần)</option>
                   <option value='birth_desc'>Năm sinh (Giảm dần)</option>
                   <option value='name_asc'>Tên (A-Z)</option>
@@ -602,6 +687,38 @@ export default function MemberList({
           {initialPersons.length > 0
             ? 'Không tìm thấy thành viên phù hợp.'
             : 'Chưa có thành viên nào. Hãy thêm thành viên đầu tiên.'}
+        </div>
+      )}
+
+      {pagination && totalPages > 1 && (
+        <div className='mt-8 flex flex-col items-center justify-between gap-3 border-t border-stone-200/70 pt-6 sm:flex-row'>
+          <p className='text-sm text-stone-500'>
+            Hiển thị {(currentPage - 1) * pageSize + 1} -{' '}
+            {Math.min(currentPage * pageSize, totalCount)} trên tổng số{' '}
+            <span className='font-medium text-stone-700'>{totalCount}</span>{' '}
+            thành viên
+          </p>
+          <div className='flex items-center gap-2'>
+            <button
+              type='button'
+              disabled={currentPage <= 1}
+              onClick={() => updateParams({ page: currentPage - 1 })}
+              className='inline-flex items-center gap-1 rounded-xl border border-stone-200/80 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40'>
+              <ChevronLeft className='size-4' />
+              Trang trước
+            </button>
+            <span className='px-2 text-sm text-stone-600'>
+              Trang {currentPage} / {totalPages}
+            </span>
+            <button
+              type='button'
+              disabled={currentPage >= totalPages}
+              onClick={() => updateParams({ page: currentPage + 1 })}
+              className='inline-flex items-center gap-1 rounded-xl border border-stone-200/80 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40'>
+              Trang sau
+              <ChevronRight className='size-4' />
+            </button>
+          </div>
         </div>
       )}
     </>

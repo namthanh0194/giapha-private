@@ -1,12 +1,13 @@
 'use client'
 
-import { Gender, Person } from '@/types'
+import { Gender, Person, PrivacyLevel } from '@/types'
 import { createClient } from '@/utils/supabase/client'
 import { AnimatePresence, motion, Variants } from 'framer-motion'
 import {
   AlertCircle,
   Briefcase,
   Image as ImageIcon,
+  Info,
   Loader2,
   Lock,
   MapPin,
@@ -18,13 +19,16 @@ import {
 import { Lunar, Solar } from 'lunar-javascript'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { updateDescendantGenerationsAction } from '@/app/actions/member'
-import { getAvatarStoragePath, getAvatarUrl } from '@/utils/avatar'
+import { updateDescendantGenerationsAction, updateMemberAction } from '@/app/actions/member'
+import Link from 'next/link'
+import { removeAvatarAction, saveAvatarAction } from '@/app/actions/avatar'
+import { getAvatarUrl } from '@/utils/avatar'
 
 interface MemberFormProps {
   initialData?: Person
   isEditing?: boolean
   isAdmin?: boolean
+  canEdit?: boolean
   /** Called with the saved person's ID after a successful save. Overrides default router.push. */
   onSuccess?: (personId: string) => void
   /** Called when user clicks Cancel. Overrides default router.back(). */
@@ -35,6 +39,7 @@ export default function MemberForm({
   initialData,
   isEditing = false,
   isAdmin = false,
+  canEdit = false,
   onSuccess,
   onCancel
 }: MemberFormProps) {
@@ -42,6 +47,13 @@ export default function MemberForm({
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [conflictState, setConflictState] = useState<{
+    message: string
+    currentVersion: number
+    pendingPayload: Record<string, unknown>
+  } | null>(null)
+  const [showDraftDiff, setShowDraftDiff] = useState(false)
+  const [observedVersion, setObservedVersion] = useState<number>(initialData?.version ?? 1)
 
   // Form states
   const [fullName, setFullName] = useState(initialData?.full_name || '')
@@ -107,6 +119,9 @@ export default function MemberForm({
   )
 
   const [note, setNote] = useState(initialData?.note || '')
+  const [privacyLevel, setPrivacyLevel] = useState<PrivacyLevel>(
+    initialData?.privacy_level || 'family'
+  )
 
   // Private fields
   const [phoneNumber, setPhoneNumber] = useState(
@@ -116,18 +131,6 @@ export default function MemberForm({
   const [currentResidence, setCurrentResidence] = useState(
     initialData?.current_residence ?? ''
   )
-
-  const slugify = (str: string) => {
-    return str
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[đĐ]/g, 'd')
-      .replace(/([^0-9a-z-\s])/g, '')
-      .replace(/(\s+)/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-+|-+$/g, '')
-  }
 
   const handleSolarDeathChange = (
     field: 'day' | 'month' | 'year',
@@ -301,7 +304,7 @@ export default function MemberForm({
     }
 
     try {
-      let currentAvatarUrl = avatarUrl
+      const currentAvatarUrl = avatarUrl
 
       // Update person data helper to avoid duplication
       const getPersonData = (url: string | null) => ({
@@ -334,10 +337,12 @@ export default function MemberForm({
         generation: generation === '' ? null : Number(generation),
         other_names: otherNames || null,
         avatar_url: url,
-        note: note || null
+        note: note || null,
+        privacy_level: privacyLevel
       })
 
       let currentPersonId = initialData?.id
+      let currentPersonVersion = isEditing ? observedVersion : undefined
 
       // For a new member, we must insert first to get the ID for the avatar filename
       if (!isEditing || !currentPersonId) {
@@ -348,36 +353,52 @@ export default function MemberForm({
           .single()
         if (createError) throw createError
         currentPersonId = newPerson.id
+        currentPersonVersion = newPerson.version
       } else {
-        // Update existing member info first
-        const { error: updateError } = await supabase
-          .from('persons')
-          .update(getPersonData(currentAvatarUrl || null))
-          .eq('id', currentPersonId)
-        if (updateError) throw updateError
+        const payload = getPersonData(currentAvatarUrl || null)
+        const updateResult = await updateMemberAction(
+          currentPersonId,
+          observedVersion,
+          payload
+        )
+
+        if (!updateResult.success) {
+          if (updateResult.conflict) {
+            setConflictState({
+              message: 'Dữ liệu đã được người khác cập nhật.',
+              currentVersion: observedVersion,
+              pendingPayload: payload
+            })
+            setLoading(false)
+            return
+          }
+          throw new Error(
+            updateResult.errorId
+              ? updateResult.error + ' Mã sự cố: ' + updateResult.errorId
+              : updateResult.error
+          )
+        }
+
+        setObservedVersion(updateResult.version)
+        currentPersonVersion = updateResult.version
+        setConflictState(null)
       }
 
-      // 2. Handle Avatar Upload if a new file is selected (now we have currentPersonId)
-      if (avatarFile && currentPersonId) {
-        const fileExt = avatarFile.name.split('.').pop()
-        const slugName = slugify(fullName)
-        const fileName = `${currentPersonId}_${slugName}.${fileExt}`
-        const filePath = `${fileName}`
-
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(filePath, avatarFile, { upsert: true })
-
-        if (uploadError) throw uploadError
-
-        currentAvatarUrl = filePath
-
-        // Update the person with the final avatar URL
-        const { error: updateAvatarError } = await supabase
-          .from('persons')
-          .update({ avatar_url: currentAvatarUrl })
-          .eq('id', currentPersonId)
-        if (updateAvatarError) throw updateAvatarError
+      // 2. Handle avatar storage through the server action.
+      if (avatarFile && currentPersonId && currentPersonVersion) {
+        const avatarResult = await saveAvatarAction(
+          currentPersonId,
+          avatarFile,
+          currentPersonVersion
+        )
+        if (!avatarResult.success) {
+          throw new Error(
+            avatarResult.errorId
+              ? avatarResult.error + ' Mã sự cố: ' + avatarResult.errorId
+              : avatarResult.error || 'Không thể lưu ảnh đại diện.'
+          )
+        }
+        setObservedVersion(avatarResult.version ?? currentPersonVersion)
       }
 
       // 3. Upsert private data (only if admin and currentPersonId exists)
@@ -567,7 +588,7 @@ export default function MemberForm({
               className={inputClasses}
             />
             <p className='mt-1.5 flex items-center gap-1 text-sm text-stone-400'>
-              <span>💡</span> Để trống nếu không rõ
+              <Info className='size-3.5 text-stone-400' aria-hidden='true' /> Để trống nếu không rõ
             </p>
           </div>
 
@@ -586,7 +607,7 @@ export default function MemberForm({
               className={inputClasses}
             />
             <p className='mt-1.5 flex items-center gap-1 text-sm text-stone-400'>
-              <span>💡</span> Để trống nếu không rõ
+              <Info className='size-3.5 text-stone-400' aria-hidden='true' /> Để trống nếu không rõ
             </p>
 
             <AnimatePresence>
@@ -699,7 +720,7 @@ export default function MemberForm({
                     />
                     <button
                       type='button'
-                      className='flex items-center gap-2 rounded-lg border border-amber-200/50 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:border-amber-300 hover:bg-amber-100'>
+                      className='flex min-h-11 items-center gap-2 rounded-lg border border-amber-200/50 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:border-amber-300 hover:bg-amber-100'>
                       <ImageIcon className='size-4' />
                       Chọn ảnh mới
                     </button>
@@ -708,33 +729,20 @@ export default function MemberForm({
                     <button
                       type='button'
                       onClick={async () => {
-                        // If there is an existing URL from Supabase, try to extract the file path to delete it
-                        if (
-                          initialData?.avatar_url &&
-                          avatarUrl === initialData.avatar_url
-                        ) {
-                          try {
-                            const filePath = getAvatarStoragePath(
-                              initialData.avatar_url
+                        if (initialData?.id && avatarUrl) {
+                          const result = await removeAvatarAction(
+                            initialData.id,
+                            observedVersion
+                          )
+                          if (!result.success) {
+                            setError(
+                              result.errorId
+                                ? result.error + ' Mã sự cố: ' + result.errorId
+                                : result.error || 'Không thể gỡ ảnh đại diện.'
                             )
-                            if (filePath) {
-                              const { error: removeError } =
-                                await supabase.storage
-                                  .from('avatars')
-                                  .remove([filePath])
-                              if (removeError) {
-                                console.error(
-                                  'Error removing avatar from storage:',
-                                  removeError
-                                )
-                              }
-                            }
-                          } catch (err) {
-                            console.error(
-                              'Failed to parse avatar URL for deletion',
-                              err
-                            )
+                            return
                           }
+                          setObservedVersion(result.version ?? observedVersion)
                         }
 
                         setAvatarUrl('')
@@ -953,6 +961,41 @@ export default function MemberForm({
         </div>
       </motion.div>
 
+      {canEdit && (
+        <motion.div
+          variants={formSectionVariants}
+          initial='hidden'
+          animate='show'
+          transition={{ delay: 0.1 }}
+          className='rounded-2xl border border-stone-200 bg-stone-50 p-5 sm:p-6'>
+          <h3 className='flex items-center gap-2 text-base font-semibold text-stone-900'>
+            <Lock className='size-4 text-amber-700' />
+            Quyền riêng tư hồ sơ
+          </h3>
+          <p className='mt-1.5 text-sm text-stone-600'>
+            Chọn người được xem toàn bộ hồ sơ này. Dữ liệu và quan hệ liên quan
+            sẽ không hiển thị cho người không có quyền.
+          </p>
+          <label className='mt-4 block text-sm font-medium text-stone-700'>
+            Mức hiển thị
+          </label>
+          <select
+            value={privacyLevel}
+            onChange={(event) =>
+              setPrivacyLevel(event.target.value as PrivacyLevel)
+            }
+            className={`${inputClasses} mt-1.5`}>
+            <option value='family'>
+              Gia đình — mọi tài khoản đang hoạt động
+            </option>
+            <option value='editors'>
+              Biên tập viên — quản trị viên và biên tập viên
+            </option>
+            <option value='admins'>Quản trị viên — chỉ quản trị viên</option>
+          </select>
+        </motion.div>
+      )}
+
       {/* Private Information Section (Admin Only) */}
       {isAdmin && (
         <motion.div
@@ -1033,6 +1076,65 @@ export default function MemberForm({
             <AlertCircle className='mt-0.5 size-5 shrink-0' />
             <p>{error}</p>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {conflictState && (
+          <motion.section
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            aria-live='assertive'
+            className='rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-stone-800 sm:p-6'>
+            <div className='flex items-start gap-3'>
+              <AlertCircle className='mt-0.5 size-5 shrink-0 text-rose-600' />
+              <div className='space-y-3'>
+                <p className='font-medium text-rose-800'>
+                  Dữ liệu đã được người khác cập nhật.
+                </p>
+                <div className='flex flex-wrap items-center gap-3'>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      router.refresh()
+                      if (initialData?.id) {
+                        router.push('/dashboard/members/' + initialData.id + '/edit')
+                      }
+                      setConflictState(null)
+                      setShowDraftDiff(false)
+                    }}
+                    className='btn-primary text-sm'>
+                    Tải phiên bản mới
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => setShowDraftDiff((prev) => !prev)}
+                    className='btn text-sm'>
+                    Xem thay đổi của bạn
+                  </button>
+                  {(isAdmin || canEdit) && (
+                    <Link
+                      href={'/dashboard/activity?table=persons'}
+                      className='inline-flex items-center text-sm font-medium text-amber-700 underline decoration-amber-700/30 underline-offset-4 hover:text-amber-800'>
+                      Xem lịch sử thay đổi
+                    </Link>
+                  )}
+                </div>
+
+                {showDraftDiff && (
+                  <div className='mt-3 rounded-xl border border-stone-200 bg-white p-4 text-xs sm:text-sm text-stone-700 space-y-1'>
+                    <p className='font-medium text-stone-900'>Thay đổi chưa lưu của bạn:</p>
+                    <p>Họ và tên: {fullName}</p>
+                    <p>Tên khác: {otherNames || '(trống)'}</p>
+                    <p>Giới tính: {gender}</p>
+                    <p>Năm sinh: {birthYear || '(trống)'}</p>
+                    <p>Ghi chú: {note || '(trống)'}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.section>
         )}
       </AnimatePresence>
 
