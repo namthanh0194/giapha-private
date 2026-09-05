@@ -10,6 +10,7 @@ import {
   GitMerge,
   History,
   Info,
+  KeyRound,
   Network,
   UserCircle,
   Users
@@ -68,6 +69,13 @@ export default function HeaderMenu() {
               <p className='truncate text-sm font-medium text-stone-900'>
                 {userEmail}
               </p>
+              <Link
+                href='/dashboard/account'
+                onClick={() => setIsOpen(false)}
+                className='mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-amber-800 transition-colors hover:text-amber-900'>
+                <KeyRound className='size-3.5' />
+                Đổi mật khẩu
+              </Link>
             </div>
 
             <div className='py-1'>

@@ -31,7 +31,7 @@ function htmlResponse(content: string, status = 200) {
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>Gia Phả ABC - Duyệt tài khoản</title>
+          <title>Gia phả Nguyễn Đăng Tộc - Duyệt tài khoản</title>
         </head>
         <body style="margin:0;background:#fafaf9;font-family:Arial,sans-serif;color:#292524">
           <main style="box-sizing:border-box;max-width:560px;margin:0 auto;padding:48px 20px">

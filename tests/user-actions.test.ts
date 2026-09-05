@@ -4,12 +4,14 @@ const {
   getAdminSupabase,
   getProfile,
   getSupabase,
+  getUser,
   revalidatePath,
   toPublicError
 } = vi.hoisted(() => ({
   getAdminSupabase: vi.fn(),
   getProfile: vi.fn(),
   getSupabase: vi.fn(),
+  getUser: vi.fn(),
   revalidatePath: vi.fn(),
   toPublicError: vi.fn((_error: unknown, message: string) => ({
     id: 'error-id',
@@ -18,11 +20,17 @@ const {
 }))
 
 vi.mock('@/utils/supabase/admin', () => ({ getAdminSupabase }))
-vi.mock('@/utils/supabase/queries', () => ({ getProfile, getSupabase }))
+vi.mock('@/utils/supabase/queries', () => ({
+  getProfile,
+  getSupabase,
+  getUser
+}))
 vi.mock('next/cache', () => ({ revalidatePath }))
 vi.mock('@/utils/errors', () => ({ toPublicError }))
 
 import {
+  changeCurrentUserPassword,
+  adminSetUserPassword,
   adminCreateUser,
   changeUserRole,
   deleteUser,
@@ -51,13 +59,20 @@ function adminClient(options?: {
   reserveSequence?: Array<{ data: unknown; error: unknown }>
   restoreError?: unknown
   deleteError?: unknown
+  updatePasswordError?: unknown
 }) {
   const reserveSequence = [...(options?.reserveSequence ?? [])]
-  const createUser = vi.fn().mockResolvedValue(
-    options?.createError
-      ? { data: { user: null }, error: options.createError }
-      : { data: { user: { id: CREATED_ID } }, error: null }
-  )
+  const createUser = vi
+    .fn()
+    .mockResolvedValue(
+      options?.createError
+        ? { data: { user: null }, error: options.createError }
+        : { data: { user: { id: CREATED_ID } }, error: null }
+    )
+  const updateUserById = vi.fn().mockResolvedValue({
+    data: { user: { id: TARGET_ID } },
+    error: options?.updatePasswordError ?? null
+  })
   const deleteAuthUser = vi.fn().mockImplementation((userId: string) =>
     Promise.resolve({
       data: {},
@@ -97,12 +112,15 @@ function adminClient(options?: {
 
   return {
     client: {
-      auth: { admin: { createUser, deleteUser: deleteAuthUser } },
+      auth: {
+        admin: { createUser, deleteUser: deleteAuthUser, updateUserById }
+      },
       from,
       rpc
     },
     createUser,
     deleteAuthUser,
+    updateUserById,
     upsert,
     rpc
   }
@@ -111,12 +129,16 @@ function adminClient(options?: {
 beforeEach(() => {
   vi.clearAllMocks()
   getProfile.mockResolvedValue({ id: ADMIN_ID, role: 'admin', is_active: true })
+  getUser.mockResolvedValue({ id: ADMIN_ID, email: 'admin@example.com' })
 })
 
 describe('active administrator authorization', () => {
   test.each([
     ['unauthenticated', null],
-    ['inactive administrator', { id: ADMIN_ID, role: 'admin', is_active: false }],
+    [
+      'inactive administrator',
+      { id: ADMIN_ID, role: 'admin', is_active: false }
+    ],
     ['editor', { id: ADMIN_ID, role: 'editor', is_active: true }],
     ['member', { id: ADMIN_ID, role: 'member', is_active: true }]
   ])('rejects %s before any privileged client call', async (_name, profile) => {
@@ -289,5 +311,71 @@ describe('admin user deletion', () => {
       target_user_id: TARGET_ID
     })
     expect(mocks.deleteAuthUser).toHaveBeenCalledWith(TARGET_ID)
+  })
+})
+
+describe('current user password change', () => {
+  test('rejects unauthenticated user', async () => {
+    getUser.mockResolvedValue(null)
+
+    const result = await changeCurrentUserPassword(
+      'old-password',
+      'new-password-2026'
+    )
+
+    expect(result).toEqual({ error: 'Từ chối truy cập.' })
+  })
+
+  test('requires the current password', async () => {
+    const result = await changeCurrentUserPassword('', 'new-password-2026')
+
+    expect(result).toEqual({ error: 'Mật khẩu hiện tại là bắt buộc.' })
+  })
+  test('rejects password shorter than eight characters', async () => {
+    const result = await changeCurrentUserPassword('old-password', '1234567')
+
+    expect(result).toEqual({ error: 'Mật khẩu mới phải có ít nhất 8 ký tự.' })
+  })
+
+  test('verifies the current password before updating it', async () => {
+    const signInWithPassword = vi.fn().mockResolvedValue({ error: null })
+    const updateUser = vi.fn().mockResolvedValue({ error: null })
+    getSupabase.mockResolvedValue({ auth: { signInWithPassword, updateUser } })
+
+    const result = await changeCurrentUserPassword(
+      'old-password',
+      'new-password-2026'
+    )
+
+    expect(result).toEqual({ success: true })
+    expect(signInWithPassword).toHaveBeenCalledWith({
+      email: 'admin@example.com',
+      password: 'old-password'
+    })
+    expect(updateUser).toHaveBeenCalledWith({ password: 'new-password-2026' })
+  })
+})
+
+describe('admin password management', () => {
+  test('updates a target password through the Auth Admin API', async () => {
+    const mocks = adminClient()
+    getAdminSupabase.mockReturnValue(mocks.client)
+
+    const result = await adminSetUserPassword(TARGET_ID, 'new-password-2026')
+
+    expect(result).toEqual({ success: true })
+    expect(mocks.updateUserById).toHaveBeenCalledWith(TARGET_ID, {
+      password: 'new-password-2026'
+    })
+  })
+
+  test('rejects a password shorter than eight characters before Admin API', async () => {
+    const mocks = adminClient()
+    getAdminSupabase.mockReturnValue(mocks.client)
+
+    const result = await adminSetUserPassword(TARGET_ID, '1234567')
+
+    expect(result).toEqual({ error: 'Mật khẩu phải có ít nhất 8 ký tự.' })
+    expect(mocks.updateUserById).not.toHaveBeenCalled()
   })
 })

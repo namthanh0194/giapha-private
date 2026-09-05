@@ -31,7 +31,7 @@ function extensionFor(file: File) {
 
 export async function saveAvatarAction(personId: string, file: File, expectedVersion: number): Promise<StorageActionResult> {
   const profile = await getProfile()
-  if (!profile?.is_active || profile.role !== 'admin') {
+  if (!profile?.is_active || (profile.role !== 'admin' && profile.role !== 'editor')) {
     return { success: false, error: 'Từ chối truy cập.' }
   }
   if (!UUID_PATTERN.test(personId)) return { success: false, error: 'Mã thành viên không hợp lệ.' }
@@ -80,7 +80,7 @@ export async function saveAvatarAction(personId: string, file: File, expectedVer
 
 export async function removeAvatarAction(personId: string, expectedVersion: number): Promise<StorageActionResult> {
   const profile = await getProfile()
-  if (!profile?.is_active || profile.role !== 'admin') {
+  if (!profile?.is_active || (profile.role !== 'admin' && profile.role !== 'editor')) {
     return { success: false, error: 'Từ chối truy cập.' }
   }
   if (!UUID_PATTERN.test(personId)) return { success: false, error: 'Mã thành viên không hợp lệ.' }

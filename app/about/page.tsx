@@ -29,11 +29,13 @@ export default function AboutPage() {
 
             <div className='max-w-none'>
               <p className='mb-8 text-sm leading-relaxed text-stone-600'>
-                <strong className='text-stone-800'>Gia Phả ABC</strong> là một
-                giải pháp mã nguồn mở được thiết kế giúp các dòng họ, gia đình
-                tự xây dựng và quản lý cây phả hệ của riêng mình. Dự án giúp bảo
-                tồn và truyền đạt lại thông tin cội nguồn một cách trực quan,
-                hiện đại, và đặc biệt là an toàn.
+                <strong className='text-stone-800'>
+                  Gia phả Nguyễn Đăng Tộc
+                </strong>{' '}
+                là một giải pháp mã nguồn mở được thiết kế giúp các dòng họ, gia
+                đình tự xây dựng và quản lý cây phả hệ của riêng mình. Dự án
+                giúp bảo tồn và truyền đạt lại thông tin cội nguồn một cách trực
+                quan, hiện đại, và đặc biệt là an toàn.
               </p>
 
               <div className='mt-8 mb-4 flex items-center gap-3 border-t border-stone-100 pt-8'>

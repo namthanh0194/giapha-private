@@ -1,7 +1,7 @@
 'use client'
 
 import { AnimatePresence, motion } from 'framer-motion'
-import { ReactNode, useEffect, useId, useRef } from 'react'
+import { ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 interface DialogShellProps {
@@ -30,6 +30,8 @@ export default function DialogShell({
   const canCloseRef = useRef(canClose)
   const titleId = useId()
   const descriptionId = useId()
+
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     onCloseRef.current = onClose
@@ -119,7 +121,11 @@ export default function DialogShell({
     }
   }, [])
 
-  if (typeof document === 'undefined') return null
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) return null
 
   return createPortal(
     <AnimatePresence>

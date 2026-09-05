@@ -34,7 +34,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
 
   // Fetch Private Data if Admin
   let privateData = null
-  if (isAdmin) {
+  if (canEdit) {
     const { data } = await supabase
       .from('person_details_private')
       .select('*')

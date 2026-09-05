@@ -585,7 +585,7 @@ export default function MemberDetailContent({
           {/* Sidebar / Private Info */}
           <div className='space-y-6'>
             <motion.div layout variants={itemVariants}>
-              {isAdmin ? (
+              {canEdit ? (
                 <div className='rounded-2xl border border-stone-200/80 bg-stone-50 p-5 sm:p-6'>
                   <h3 className='mb-4 flex items-center gap-2 border-b border-stone-200/60 pb-3 text-base font-semibold text-stone-900 sm:text-base'>
                     <span className='rounded-lg border border-amber-200/50 bg-amber-100/80 p-1.5 text-amber-700'>

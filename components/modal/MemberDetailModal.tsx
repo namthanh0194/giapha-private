@@ -58,7 +58,7 @@ export default function MemberDetailModal() {
         setPerson(personData)
 
         // 2. Fetch Private Data if Admin
-        if (isAdmin) {
+        if (canEdit) {
           const { data: privData } = await supabase
             .from('person_details_private')
             .select('*')
@@ -76,7 +76,7 @@ export default function MemberDetailModal() {
         setLoading(false)
       }
     },
-    [isAdmin, supabase]
+    [canEdit, supabase]
   )
 
   // Sync state with URL parameter or create mode
@@ -108,7 +108,6 @@ export default function MemberDetailModal() {
       if (timeoutId) clearTimeout(timeoutId)
     }
   }, [memberId, showCreateMember, fetchData])
-
 
   // Called by MemberForm after a successful save
   const handleEditSuccess = (savedPersonId: string) => {
@@ -150,135 +149,135 @@ export default function MemberDetailModal() {
       onClose={closeModal}
       canClose={!isEditing && !showCreateMember}
       maxWidthClass='max-w-4xl'>
-            {/* Sticky Header Actions */}
-            <div className='absolute top-4 right-4 z-20 flex items-center gap-2 sm:top-5 sm:right-5'>
-              {isEditing ? (
-                /* In edit mode — show back button */
-                <button
-                  onClick={() => {
-                    setIsEditing(false)
-                  }}
-                  className='inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-stone-200/50 bg-stone-100/80 px-3 py-2.5 text-sm font-medium text-stone-700 transition-all duration-300 hover:-translate-y-1 hover:bg-stone-200'>
-                  <ArrowLeft className='size-4' />
-                  <span className='hidden sm:inline'>Quay lại</span>
-                </button>
-              ) : (
-                canEdit &&
-                person && (
-                  <>
-                    <Link
-                      href={`/dashboard/members/${person.id}`}
-                      className='btn-amber text-sm'>
-                      <ExternalLink className='size-4' />
-                      <span className='hidden sm:inline'>Xem</span>
-                    </Link>
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className='btn-amber text-sm'>
-                      <Edit2 className='size-4' />
-                      <span className='hidden sm:inline'>Chỉnh sửa</span>
-                    </button>
-                  </>
-                )
-              )}
+      {/* Sticky Header Actions */}
+      <div className='absolute top-4 right-4 z-20 flex items-center gap-2 sm:top-5 sm:right-5'>
+        {isEditing ? (
+          /* In edit mode — show back button */
+          <button
+            onClick={() => {
+              setIsEditing(false)
+            }}
+            className='inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-stone-200/50 bg-stone-100/80 px-3 py-2.5 text-sm font-medium text-stone-700 transition-all duration-300 hover:-translate-y-1 hover:bg-stone-200'>
+            <ArrowLeft className='size-4' />
+            <span className='hidden sm:inline'>Quay lại</span>
+          </button>
+        ) : (
+          canEdit &&
+          person && (
+            <>
+              <Link
+                href={`/dashboard/members/${person.id}`}
+                className='btn-amber text-sm'>
+                <ExternalLink className='size-4' />
+                <span className='hidden sm:inline'>Xem</span>
+              </Link>
               <button
-                onClick={closeModal}
-                className='flex size-11 items-center justify-center rounded-full border border-stone-200/50 bg-stone-100/80 text-stone-600 transition-colors hover:bg-stone-200 hover:text-stone-900'
-                aria-label='Đóng'>
-                <X className='size-5' aria-hidden='true' />
+                onClick={() => setIsEditing(true)}
+                className='btn-amber text-sm'>
+                <Edit2 className='size-4' />
+                <span className='hidden sm:inline'>Chỉnh sửa</span>
               </button>
-            </div>
+            </>
+          )
+        )}
+        <button
+          onClick={closeModal}
+          className='flex size-11 items-center justify-center rounded-full border border-stone-200/50 bg-stone-100/80 text-stone-600 transition-colors hover:bg-stone-200 hover:text-stone-900'
+          aria-label='Đóng'>
+          <X className='size-5' aria-hidden='true' />
+        </button>
+      </div>
 
-            <AnimatePresence mode='wait'>
-              {loading ? (
-                <motion.div
-                  key='loading'
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  className='flex min-h-125 flex-1 flex-col items-center justify-center gap-4'>
-                  <div className='size-10 animate-spin rounded-full border-4 border-amber-600 border-t-transparent'></div>
-                  <p className='font-medium text-stone-500'>Đang tải...</p>
-                </motion.div>
-              ) : error ? (
-                <motion.div
-                  key='error'
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  className='flex min-h-100 flex-1 flex-col items-center justify-center gap-4 p-8 text-center'>
-                  <div className='mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500 shadow-inner'>
-                    <AlertCircle className='size-8' />
-                  </div>
-                  <p className='text-sm font-medium text-red-600'>{error}</p>
-                  <button
-                    onClick={closeModal}
-                    className='btn mt-2 rounded-full'>
-                    Đóng
-                  </button>
-                </motion.div>
-              ) : isEditing && formInitialData ? (
-                /* ── EDIT MODE ── */
-                <motion.div
-                  key='editing'
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.2 }}
-                  className='custom-scrollbar flex-1 overflow-y-auto px-4 pt-16 pb-8 sm:px-8'>
-                  <h2 className='mb-6 font-serif text-xl font-semibold text-stone-800'>
-                    Chỉnh sửa thành viên
-                  </h2>
-                  <MemberForm
-                    initialData={
-                      formInitialData as Parameters<
-                        typeof MemberForm
-                      >[0]['initialData']
-                    }
-                    isEditing={true}
-                    isAdmin={isAdmin}
-                    onSuccess={handleEditSuccess}
-                    onCancel={() => setIsEditing(false)}
-                  />
-                </motion.div>
-              ) : showCreateMember ? (
-                /* ── CREATE MODE ── */
-                <motion.div
-                  key='creating'
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.2 }}
-                  className='custom-scrollbar flex-1 overflow-y-auto px-4 pt-16 pb-8 sm:px-8'>
-                  <h2 className='mb-6 font-serif text-xl font-semibold text-stone-800'>
-                    Thêm thành viên mới
-                  </h2>
-                  <MemberForm
-                    isAdmin={isAdmin}
-                    onSuccess={handleCreateSuccess}
-                    onCancel={closeModal}
-                  />
-                </motion.div>
-              ) : person ? (
-                /* ── DETAIL MODE ── */
-                <motion.div
-                  key='details'
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.3 }}
-                  className='custom-scrollbar flex-1 overflow-y-auto'>
-                  <MemberDetailContent
-                    person={person}
-                    privateData={privateData}
-                    isAdmin={isAdmin}
-                    canEdit={canEdit}
-                  />
-                </motion.div>
-              ) : null}
-            </AnimatePresence>
+      <AnimatePresence mode='wait'>
+        {loading ? (
+          <motion.div
+            key='loading'
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className='flex min-h-125 flex-1 flex-col items-center justify-center gap-4'>
+            <div className='size-10 animate-spin rounded-full border-4 border-amber-600 border-t-transparent'></div>
+            <p className='font-medium text-stone-500'>Đang tải...</p>
+          </motion.div>
+        ) : error ? (
+          <motion.div
+            key='error'
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className='flex min-h-100 flex-1 flex-col items-center justify-center gap-4 p-8 text-center'>
+            <div className='mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500 shadow-inner'>
+              <AlertCircle className='size-8' />
+            </div>
+            <p className='text-sm font-medium text-red-600'>{error}</p>
+            <button onClick={closeModal} className='btn mt-2 rounded-full'>
+              Đóng
+            </button>
+          </motion.div>
+        ) : isEditing && formInitialData ? (
+          /* ── EDIT MODE ── */
+          <motion.div
+            key='editing'
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.2 }}
+            className='custom-scrollbar flex-1 overflow-y-auto px-4 pt-16 pb-8 sm:px-8'>
+            <h2 className='mb-6 font-serif text-xl font-semibold text-stone-800'>
+              Chỉnh sửa thành viên
+            </h2>
+            <MemberForm
+              initialData={
+                formInitialData as Parameters<
+                  typeof MemberForm
+                >[0]['initialData']
+              }
+              isEditing={true}
+              isAdmin={isAdmin}
+              canEdit={canEdit}
+              onSuccess={handleEditSuccess}
+              onCancel={() => setIsEditing(false)}
+            />
+          </motion.div>
+        ) : showCreateMember ? (
+          /* ── CREATE MODE ── */
+          <motion.div
+            key='creating'
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.2 }}
+            className='custom-scrollbar flex-1 overflow-y-auto px-4 pt-16 pb-8 sm:px-8'>
+            <h2 className='mb-6 font-serif text-xl font-semibold text-stone-800'>
+              Thêm thành viên mới
+            </h2>
+            <MemberForm
+              isAdmin={isAdmin}
+              canEdit={canEdit}
+              onSuccess={handleCreateSuccess}
+              onCancel={closeModal}
+            />
+          </motion.div>
+        ) : person ? (
+          /* ── DETAIL MODE ── */
+          <motion.div
+            key='details'
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className='custom-scrollbar flex-1 overflow-y-auto'>
+            <MemberDetailContent
+              person={person}
+              privateData={privateData}
+              isAdmin={isAdmin}
+              canEdit={canEdit}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </DialogShell>
   ) : null
 }

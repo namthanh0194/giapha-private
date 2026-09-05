@@ -19,7 +19,10 @@ import {
 import { Lunar, Solar } from 'lunar-javascript'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { updateDescendantGenerationsAction, updateMemberAction } from '@/app/actions/member'
+import {
+  updateDescendantGenerationsAction,
+  updateMemberAction
+} from '@/app/actions/member'
 import Link from 'next/link'
 import { removeAvatarAction, saveAvatarAction } from '@/app/actions/avatar'
 import { getAvatarUrl } from '@/utils/avatar'
@@ -53,7 +56,9 @@ export default function MemberForm({
     pendingPayload: Record<string, unknown>
   } | null>(null)
   const [showDraftDiff, setShowDraftDiff] = useState(false)
-  const [observedVersion, setObservedVersion] = useState<number>(initialData?.version ?? 1)
+  const [observedVersion, setObservedVersion] = useState<number>(
+    initialData?.version ?? 1
+  )
 
   // Form states
   const [fullName, setFullName] = useState(initialData?.full_name || '')
@@ -402,7 +407,7 @@ export default function MemberForm({
       }
 
       // 3. Upsert private data (only if admin and currentPersonId exists)
-      if (isAdmin && currentPersonId) {
+      if (canEdit && currentPersonId) {
         const normalizedData = {
           person_id: currentPersonId,
           phone_number: phoneNumber?.trim() || null,
@@ -588,7 +593,8 @@ export default function MemberForm({
               className={inputClasses}
             />
             <p className='mt-1.5 flex items-center gap-1 text-sm text-stone-400'>
-              <Info className='size-3.5 text-stone-400' aria-hidden='true' /> Để trống nếu không rõ
+              <Info className='size-3.5 text-stone-400' aria-hidden='true' /> Để
+              trống nếu không rõ
             </p>
           </div>
 
@@ -607,7 +613,8 @@ export default function MemberForm({
               className={inputClasses}
             />
             <p className='mt-1.5 flex items-center gap-1 text-sm text-stone-400'>
-              <Info className='size-3.5 text-stone-400' aria-hidden='true' /> Để trống nếu không rõ
+              <Info className='size-3.5 text-stone-400' aria-hidden='true' /> Để
+              trống nếu không rõ
             </p>
 
             <AnimatePresence>
@@ -716,11 +723,11 @@ export default function MemberForm({
                           setAvatarPreview(URL.createObjectURL(file))
                         }
                       }}
-                      className='absolute inset-0 h-full w-full opacity-0'
+                      className='absolute inset-0 h-full w-full cursor-pointer opacity-0'
                     />
                     <button
                       type='button'
-                      className='flex min-h-11 items-center gap-2 rounded-lg border border-amber-200/50 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:border-amber-300 hover:bg-amber-100'>
+                      className='flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-amber-200/50 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:border-amber-300 hover:bg-amber-100'>
                       <ImageIcon className='size-4' />
                       Chọn ảnh mới
                     </button>
@@ -997,7 +1004,7 @@ export default function MemberForm({
       )}
 
       {/* Private Information Section (Admin Only) */}
-      {isAdmin && (
+      {canEdit && (
         <motion.div
           variants={formSectionVariants}
           initial='hidden'
@@ -1013,7 +1020,7 @@ export default function MemberForm({
             </span>
             <span>Thông tin riêng tư</span>
             <span className='ml-auto rounded-md border border-amber-300/60 bg-amber-200/80 px-2.5 py-1 text-sm font-medium text-amber-800 sm:ml-2'>
-              Chỉ Admin
+              Admin và Editor
             </span>
           </h3>
           <div className='relative z-10 grid grid-cols-1 gap-6 md:grid-cols-2'>
@@ -1099,7 +1106,9 @@ export default function MemberForm({
                     onClick={() => {
                       router.refresh()
                       if (initialData?.id) {
-                        router.push('/dashboard/members/' + initialData.id + '/edit')
+                        router.push(
+                          '/dashboard/members/' + initialData.id + '/edit'
+                        )
                       }
                       setConflictState(null)
                       setShowDraftDiff(false)
@@ -1123,8 +1132,10 @@ export default function MemberForm({
                 </div>
 
                 {showDraftDiff && (
-                  <div className='mt-3 rounded-xl border border-stone-200 bg-white p-4 text-xs sm:text-sm text-stone-700 space-y-1'>
-                    <p className='font-medium text-stone-900'>Thay đổi chưa lưu của bạn:</p>
+                  <div className='mt-3 space-y-1 rounded-xl border border-stone-200 bg-white p-4 text-xs text-stone-700 sm:text-sm'>
+                    <p className='font-medium text-stone-900'>
+                      Thay đổi chưa lưu của bạn:
+                    </p>
                     <p>Họ và tên: {fullName}</p>
                     <p>Tên khác: {otherNames || '(trống)'}</p>
                     <p>Giới tính: {gender}</p>

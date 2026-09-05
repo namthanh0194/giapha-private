@@ -44,7 +44,7 @@ export default async function EditMemberPage({ params }: PageProps) {
 
   // Fetch Private Data
   let privateData = null
-  if (isAdmin) {
+  if (isAdmin || isEditor) {
     const { data } = await supabase
       .from('person_details_private')
       .select('*')
@@ -53,7 +53,7 @@ export default async function EditMemberPage({ params }: PageProps) {
     privateData = data
   }
 
-  const initialData = isAdmin ? { ...person, ...privateData } : { ...person }
+  const initialData = { ...person, ...privateData }
 
   return (
     <div className='relative flex w-full flex-1 flex-col pb-8'>

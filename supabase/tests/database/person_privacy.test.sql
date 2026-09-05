@@ -94,7 +94,10 @@ select results_eq($$select count(*)::int from public.relationships$$, $$values (
 select results_eq($$select count(*)::int from public.custom_events$$, $$values (1)$$, 'Editor cannot read event scoped to admins-only person');
 select results_eq($$select count(*)::int from public.gallery_items$$, $$values (1)$$, 'Editor cannot read gallery item scoped to admins-only person');
 select results_eq($$select count(*)::int from public.person_citations$$, $$values (0)$$, 'Editor cannot read citation payload for admins-only person');
-select results_eq($$select count(*)::int from public.person_details_private$$, $$values (0)$$, 'Editor cannot read private details');
+-- Editor can manage and view private details for visible people
+insert into public.person_details_private (person_id, phone_number, occupation, current_residence)
+values ('11111111-1111-4111-8111-111111111111', '0912345678', 'Kỹ sư', 'Hà Nội');
+select results_eq($$select phone_number from public.person_details_private where person_id = '11111111-1111-4111-8111-111111111111'$$, $$values ('0912345678'::text)$$, 'Editor can read and insert private details for visible people');
 select is_empty($$select p.full_name from public.relationships r join public.persons p on p.id in (r.person_a, r.person_b) where p.privacy_level = 'admins'$$, 'Editor join cannot leak admins-only person name');
 select isnt_empty($$select * from public.audit_log$$, 'Editor can read audit log');
 

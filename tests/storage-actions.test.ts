@@ -182,13 +182,55 @@ describe('active admin authorization', () => {
       formData.set('file', image())
       return saveGalleryItemAction(formData)
     }],
-    ['delete gallery', () => deleteGalleryItemAction(ITEM_ID, 1)],
-    ['save avatar', () => saveAvatarAction(PERSON_ID, image(), 1)],
-    ['remove avatar', () => removeAvatarAction(PERSON_ID, 1)]
+    ['delete gallery', () => deleteGalleryItemAction(ITEM_ID, 1)]
   ] as const)('rejects editor for %s', async (_name, action) => {
     const result = await action()
 
     expect(result).toEqual({ success: false, error: 'Từ chối truy cập.' })
     expect(getSupabase).not.toHaveBeenCalled()
+  })
+})
+
+describe('editor avatar authorization', () => {
+  beforeEach(() => {
+    getProfile.mockResolvedValue({ id: ADMIN_ID, role: 'editor', is_active: true })
+  })
+
+  test('allows an editor to upload an avatar', async () => {
+    const upload = vi.fn().mockResolvedValue({ error: null })
+    const remove = vi.fn().mockResolvedValue({ error: null })
+    const single = vi.fn().mockResolvedValue({ data: { avatar_url: null }, error: null })
+    const rpc = vi.fn().mockResolvedValue({ data: 2, error: null })
+    getSupabase.mockResolvedValue({
+      storage: { from: vi.fn(() => ({ upload, remove })) },
+      from: vi.fn(() => ({ select: vi.fn(() => ({ eq: vi.fn(() => ({ single })) })) })),
+      rpc
+    })
+
+    await expect(saveAvatarAction(PERSON_ID, image(), 1)).resolves.toEqual({ success: true, version: 2 })
+    expect(upload).toHaveBeenCalledOnce()
+  })
+
+  test('allows an editor to remove an avatar', async () => {
+    const remove = vi.fn().mockResolvedValue({ error: null })
+    const single = vi.fn().mockResolvedValue({ data: { avatar_url: 'old-avatar.jpg' }, error: null })
+    const rpc = vi.fn().mockResolvedValue({ data: 2, error: null })
+    getSupabase.mockResolvedValue({
+      storage: { from: vi.fn(() => ({ remove })) },
+      from: vi.fn(() => ({ select: vi.fn(() => ({ eq: vi.fn(() => ({ single })) })) })),
+      rpc
+    })
+
+    await expect(removeAvatarAction(PERSON_ID, 1)).resolves.toEqual({ success: true, version: 2 })
+    expect(remove).toHaveBeenCalledWith(['old-avatar.jpg'])
+  })
+})
+describe('unauthorized avatar actions', () => {
+  test('rejects inactive or viewer users', async () => {
+    getProfile.mockResolvedValueOnce({ id: ADMIN_ID, role: 'editor', is_active: false })
+    await expect(saveAvatarAction(PERSON_ID, image(), 1)).resolves.toEqual({ success: false, error: 'Từ chối truy cập.' })
+
+    getProfile.mockResolvedValueOnce({ id: ADMIN_ID, role: 'viewer', is_active: true })
+    await expect(removeAvatarAction(PERSON_ID, 1)).resolves.toEqual({ success: false, error: 'Từ chối truy cập.' })
   })
 })

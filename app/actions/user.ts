@@ -3,10 +3,11 @@
 import { UserRole } from '@/types'
 import { toPublicError } from '@/utils/errors'
 import { getAdminSupabase } from '@/utils/supabase/admin'
-import { getProfile, getSupabase } from '@/utils/supabase/queries'
+import { getProfile, getSupabase, getUser } from '@/utils/supabase/queries'
 import { revalidatePath } from 'next/cache'
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 async function hasActiveAdminAccess() {
   const profile = await getProfile()
@@ -31,7 +32,10 @@ export async function changeUserRole(userId: string, newRole: UserRole) {
     const publicError = toPublicError(
       error,
       'Không thể thay đổi vai trò người dùng.',
-      { event: 'user.role.change_failed', fields: { targetUserId: userId, newRole } }
+      {
+        event: 'user.role.change_failed',
+        fields: { targetUserId: userId, newRole }
+      }
     )
     return { error: publicError.message, errorId: publicError.id }
   }
@@ -46,7 +50,8 @@ export async function deleteUser(userId: string) {
     return { error: 'Từ chối truy cập.' }
   }
   if (!UUID_PATTERN.test(userId)) return invalidUserId()
-  if (userId === profile.id) return { error: 'Không thể tự xoá tài khoản của bạn.' }
+  if (userId === profile.id)
+    return { error: 'Không thể tự xoá tài khoản của bạn.' }
 
   const supabase = getAdminSupabase()
   const { data: reservations, error: reservationError } = await supabase.rpc(
@@ -58,10 +63,14 @@ export async function deleteUser(userId: string) {
     if (reservationError.message.includes('last active administrator')) {
       return { error: 'Không thể xoá quản trị viên đang hoạt động cuối cùng.' }
     }
-    const publicError = toPublicError(reservationError, 'Không thể kiểm tra người dùng.', {
-      event: 'user.delete.reservation_failed',
-      fields: { targetUserId: userId }
-    })
+    const publicError = toPublicError(
+      reservationError,
+      'Không thể kiểm tra người dùng.',
+      {
+        event: 'user.delete.reservation_failed',
+        fields: { targetUserId: userId }
+      }
+    )
     return { error: publicError.message, errorId: publicError.id }
   }
 
@@ -86,15 +95,27 @@ export async function deleteUser(userId: string) {
             fields: { targetUserId: userId }
           }
         )
-        return { error: publicError.message, errorId: publicError.id, retryable: true }
+        return {
+          error: publicError.message,
+          errorId: publicError.id,
+          retryable: true
+        }
       }
     }
 
-    const publicError = toPublicError(error, 'Không thể xoá người dùng lúc này. Vui lòng thử lại.', {
-      event: 'user.delete.auth_failed',
-      fields: { targetUserId: userId }
-    })
-    return { error: publicError.message, errorId: publicError.id, retryable: true }
+    const publicError = toPublicError(
+      error,
+      'Không thể xoá người dùng lúc này. Vui lòng thử lại.',
+      {
+        event: 'user.delete.auth_failed',
+        fields: { targetUserId: userId }
+      }
+    )
+    return {
+      error: publicError.message,
+      errorId: publicError.id,
+      retryable: true
+    }
   }
 
   revalidatePath('/dashboard/users')
@@ -123,10 +144,14 @@ export async function adminCreateUser(formData: FormData) {
   })
 
   if (error || !data.user) {
-    const publicError = toPublicError(error || new Error('Auth user was not created'), 'Không thể tạo người dùng.', {
-      event: 'user.create.auth_failed',
-      fields: { role }
-    })
+    const publicError = toPublicError(
+      error || new Error('Auth user was not created'),
+      'Không thể tạo người dùng.',
+      {
+        event: 'user.create.auth_failed',
+        fields: { role }
+      }
+    )
     return { error: publicError.message, errorId: publicError.id }
   }
 
@@ -135,7 +160,9 @@ export async function adminCreateUser(formData: FormData) {
     .upsert({ id: data.user.id, role, is_active: isActive })
 
   if (profileError) {
-    const { error: cleanupError } = await supabase.auth.admin.deleteUser(data.user.id)
+    const { error: cleanupError } = await supabase.auth.admin.deleteUser(
+      data.user.id
+    )
     if (cleanupError) {
       const publicError = toPublicError(
         cleanupError,
@@ -147,10 +174,14 @@ export async function adminCreateUser(formData: FormData) {
       )
       return { error: publicError.message, errorId: publicError.id }
     }
-    const publicError = toPublicError(profileError, 'Không thể tạo hồ sơ người dùng.', {
-      event: 'user.create.profile_upsert_failed',
-      fields: { role, userId: data.user.id }
-    })
+    const publicError = toPublicError(
+      profileError,
+      'Không thể tạo hồ sơ người dùng.',
+      {
+        event: 'user.create.profile_upsert_failed',
+        fields: { role, userId: data.user.id }
+      }
+    )
     return { error: publicError.message, errorId: publicError.id }
   }
 
@@ -172,11 +203,84 @@ export async function toggleUserStatus(userId: string, newStatus: boolean) {
     const publicError = toPublicError(
       error,
       'Không thể thay đổi trạng thái người dùng.',
-      { event: 'user.status.change_failed', fields: { targetUserId: userId, newStatus } }
+      {
+        event: 'user.status.change_failed',
+        fields: { targetUserId: userId, newStatus }
+      }
     )
     return { error: publicError.message, errorId: publicError.id }
   }
 
   revalidatePath('/dashboard/users')
+  return { success: true }
+}
+export async function adminSetUserPassword(
+  userId: string,
+  newPassword: string
+) {
+  if (!(await hasActiveAdminAccess())) return { error: 'Từ chối truy cập.' }
+  if (!UUID_PATTERN.test(userId)) return invalidUserId()
+
+  if (newPassword.length < 8) {
+    return { error: 'Mật khẩu phải có ít nhất 8 ký tự.' }
+  }
+
+  const supabase = getAdminSupabase()
+  const { error } = await supabase.auth.admin.updateUserById(userId, {
+    password: newPassword
+  })
+
+  if (error) {
+    const publicError = toPublicError(error, 'Không thể đặt mật khẩu mới.', {
+      event: 'user.password.set_failed',
+      fields: { targetUserId: userId }
+    })
+    return { error: publicError.message, errorId: publicError.id }
+  }
+
+  return { success: true }
+}
+export async function changeCurrentUserPassword(
+  currentPassword: string,
+  newPassword: string
+) {
+  const user = await getUser()
+  if (!user?.email) {
+    return { error: 'Từ chối truy cập.' }
+  }
+
+  if (!currentPassword) {
+    return { error: 'Mật khẩu hiện tại là bắt buộc.' }
+  }
+  if (newPassword.length < 8) {
+    return { error: 'Mật khẩu mới phải có ít nhất 8 ký tự.' }
+  }
+
+  const supabase = await getSupabase()
+  const { error: verifyError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: currentPassword
+  })
+
+  if (verifyError) {
+    return { error: 'Mật khẩu hiện tại không chính xác.' }
+  }
+
+  const { error: updateError } = await supabase.auth.updateUser({
+    password: newPassword
+  })
+
+  if (updateError) {
+    const publicError = toPublicError(
+      updateError,
+      'Không thể cập nhật mật khẩu mới.',
+      {
+        event: 'user.password.self_change_failed',
+        fields: { userId: user.id }
+      }
+    )
+    return { error: publicError.message, errorId: publicError.id }
+  }
+
   return { success: true }
 }

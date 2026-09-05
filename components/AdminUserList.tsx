@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  adminSetUserPassword,
   adminCreateUser,
   changeUserRole,
   deleteUser,
@@ -9,7 +10,7 @@ import {
 import config from '@/app/config'
 import { AdminUserData, UserRole } from '@/types'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Trash } from 'lucide-react'
+import { KeyRound, Trash } from 'lucide-react'
 import { useState } from 'react'
 
 interface AdminUserListProps {
@@ -33,6 +34,11 @@ export default function AdminUserList({
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+  const [passwordTargetUser, setPasswordTargetUser] =
+    useState<AdminUserData | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
   const [notification, setNotification] = useState<Notification | null>(null)
 
   const showNotification = (
@@ -146,6 +152,55 @@ export default function AdminUserList({
     }
   }
 
+  const handleSetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!passwordTargetUser) return
+
+    if (isDemo) {
+      showNotification(
+        'Đây là trang demo, chức năng đổi mật khẩu bị hạn chế.',
+        'info'
+      )
+      setPasswordTargetUser(null)
+      return
+    }
+
+    if (newPassword.length < 8) {
+      showNotification('Mật khẩu phải có ít nhất 8 ký tự.', 'error')
+      return
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      showNotification('Mật khẩu xác nhận không khớp.', 'error')
+      return
+    }
+
+    try {
+      setIsUpdatingPassword(true)
+      const result = await adminSetUserPassword(
+        passwordTargetUser.id,
+        newPassword
+      )
+
+      if (result?.error) {
+        showNotification(result.error, 'error')
+        return
+      }
+
+      showNotification('Đặt mật khẩu mới thành công.', 'success')
+      setPasswordTargetUser(null)
+      setNewPassword('')
+      setConfirmNewPassword('')
+    } catch (error: unknown) {
+      const msg =
+        error instanceof Error
+          ? error.message
+          : 'Lỗi không xác định khi đặt mật khẩu'
+      showNotification(msg, 'error')
+    } finally {
+      setIsUpdatingPassword(false)
+    }
+  }
   const handleCreateUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (isDemo) {
@@ -355,6 +410,18 @@ export default function AdminUserList({
                     {user.id !== currentUserId && (
                       <div className='flex items-center justify-end gap-2'>
                         <button
+                          type='button'
+                          title='Đặt mật khẩu mới'
+                          disabled={loadingId === user.id}
+                          onClick={() => {
+                            setPasswordTargetUser(user)
+                            setNewPassword('')
+                            setConfirmNewPassword('')
+                          }}
+                          className='rounded-md p-1.5 text-stone-400 transition-colors hover:bg-amber-50 hover:text-amber-700 disabled:opacity-50'>
+                          <KeyRound className='size-4' />
+                        </button>{' '}
+                        <button
                           title='Xoá người dùng'
                           disabled={loadingId === user.id}
                           onClick={() => handleDelete(user.id)}
@@ -382,6 +449,89 @@ export default function AdminUserList({
           </table>
         </div>
       </div>
+
+      {passwordTargetUser && (
+        <div className='fixed inset-0 z-60 flex items-center justify-center bg-stone-900/40 p-4 backdrop-blur-sm transition-opacity duration-300'>
+          <div className='w-full max-w-md transform overflow-hidden rounded-2xl border border-stone-200/60 bg-white/95 backdrop-blur-xl transition-all'>
+            <div className='flex items-center justify-between border-b border-stone-100/80 bg-stone-50/50 px-6 py-5'>
+              <div>
+                <h3 className='font-serif text-xl font-semibold text-stone-800'>
+                  Đặt mật khẩu mới
+                </h3>
+                <p className='mt-1 text-sm text-stone-500'>
+                  {passwordTargetUser.email}
+                </p>
+              </div>
+              <button
+                onClick={() => setPasswordTargetUser(null)}
+                className='flex size-8 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600'>
+                <svg
+                  className='size-5'
+                  fill='none'
+                  viewBox='0 0 24 24'
+                  stroke='currentColor'>
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M6 18L18 6M6 6l12 12'
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleSetPassword} className='p-6'>
+              <div className='space-y-4'>
+                <div>
+                  <label className='mb-1 block text-sm font-medium text-stone-700'>
+                    Mật khẩu mới <span className='text-red-500'>*</span>
+                  </label>
+                  <input
+                    type='password'
+                    required
+                    minLength={8}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className='w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 transition-colors focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none sm:py-2.5'
+                    placeholder='Ít nhất 8 ký tự'
+                  />
+                </div>
+
+                <div>
+                  <label className='mb-1 block text-sm font-medium text-stone-700'>
+                    Xác nhận mật khẩu mới{' '}
+                    <span className='text-red-500'>*</span>
+                  </label>
+                  <input
+                    type='password'
+                    required
+                    minLength={8}
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    className='w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 transition-colors focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none sm:py-2.5'
+                    placeholder='Nhập lại mật khẩu mới'
+                  />
+                </div>
+              </div>
+
+              <div className='mt-8 flex justify-end gap-3 pt-2'>
+                <button
+                  type='button'
+                  onClick={() => setPasswordTargetUser(null)}
+                  className='btn'>
+                  Hủy
+                </button>
+                <button
+                  type='submit'
+                  disabled={isUpdatingPassword}
+                  className='btn-primary'>
+                  {isUpdatingPassword ? 'Đang lưu...' : 'Lưu mật khẩu'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Create User Modal */}
       {isCreateModalOpen && (
