@@ -21,7 +21,10 @@ export const MIGRATION_CATALOG = [
   'supabase/migrations/20260903140000_change_requests.sql'
   ,'supabase/migrations/20260904090000_family_graph_queries.sql'
   ,'supabase/migrations/20260904100000_person_search.sql',
-  'supabase/migrations/20260904110000_optimistic_concurrency.sql'
+  'supabase/migrations/20260904110000_optimistic_concurrency.sql',
+  'supabase/migrations/20260904120000_allow_editors_private_details.sql',
+  'supabase/migrations/20260904130000_public_homepage_summary_rpc.sql',
+  'supabase/migrations/20260915120000_expand_family_subtree_depth.sql'
 ] as const
 
 export async function readMigrationContent(
@@ -185,6 +188,30 @@ export async function readMigrationContent(
         path.join(
           process.cwd(),
           'supabase/migrations/20260904110000_optimistic_concurrency.sql'
+        ),
+        'utf8'
+      )
+    case 'supabase/migrations/20260904120000_allow_editors_private_details.sql':
+      return fs.readFile(
+        path.join(
+          process.cwd(),
+          'supabase/migrations/20260904120000_allow_editors_private_details.sql'
+        ),
+        'utf8'
+      )
+    case 'supabase/migrations/20260904130000_public_homepage_summary_rpc.sql':
+      return fs.readFile(
+        path.join(
+          process.cwd(),
+          'supabase/migrations/20260904130000_public_homepage_summary_rpc.sql'
+        ),
+        'utf8'
+      )
+    case 'supabase/migrations/20260915120000_expand_family_subtree_depth.sql':
+      return fs.readFile(
+        path.join(
+          process.cwd(),
+          'supabase/migrations/20260915120000_expand_family_subtree_depth.sql'
         ),
         'utf8'
       )
