@@ -9,7 +9,7 @@ import MindmapToolbar from './MindmapToolbar'
 
 import { buildAdjacencyLists } from '@/utils/treeHelpers'
 
-const DEFAULT_AUTO_COLLAPSE_LEVEL = 2
+const DEFAULT_AUTO_COLLAPSE_LEVEL = 20
 
 interface MindmapTreeProps {
   personsMap: Map<string, Person>

@@ -11,7 +11,7 @@ import TreeToolbar from './TreeToolbar'
 
 import { buildAdjacencyLists, getFilteredTreeData } from '@/utils/treeHelpers'
 
-const DEFAULT_AUTO_COLLAPSE_LEVEL = 2
+const DEFAULT_AUTO_COLLAPSE_LEVEL = 20
 
 export default function FamilyTree({
   personsMap,
