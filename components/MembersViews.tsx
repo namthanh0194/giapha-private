@@ -6,7 +6,7 @@ import RootSelector from '@/components/RootSelector'
 import { Person, Relationship } from '@/types'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
-import { fetchFamilySubtree, mergeGraphDelta } from '@/utils/supabase/family-graph'
+import { FAMILY_TREE_MAX_DEPTH, fetchFamilySubtree, mergeGraphDelta } from '@/utils/supabase/family-graph'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 
@@ -50,7 +50,7 @@ export default function MembersViews({
   listPersons = persons,
   relationships,
   initialGraphTruncated = false,
-  initialGraphDepth = 3,
+  initialGraphDepth = 20,
   canEdit = false,
   listPagination
 }: MembersViewsProps) {
@@ -114,7 +114,7 @@ export default function MembersViews({
   const activeRootId = rootId || defaultRootId
 
   const loadMore = async () => {
-    if (!activeRootId || isLoadingMore || graphDepth >= 10) return
+    if (!activeRootId || isLoadingMore || graphDepth >= FAMILY_TREE_MAX_DEPTH) return
     setIsLoadingMore(true)
     try {
       const delta = await fetchFamilySubtree(createClient(), {
@@ -123,6 +123,29 @@ export default function MembersViews({
         includeSpouses: true
       })
       const merged = mergeGraphDelta(new Map(graphPersons.map((person) => [person.id, person])), graphRelationships, delta)
+      setGraphPersons([...merged.personsMap.values()])
+      setGraphRelationships(merged.relationships)
+      setGraphDepth(delta.maxDepth)
+      setIsTruncated(delta.truncated)
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
+
+  const loadAll = async () => {
+    if (!activeRootId || isLoadingMore || graphDepth >= FAMILY_TREE_MAX_DEPTH) return
+    setIsLoadingMore(true)
+    try {
+      const delta = await fetchFamilySubtree(createClient(), {
+        rootId: activeRootId,
+        maxDepth: FAMILY_TREE_MAX_DEPTH,
+        includeSpouses: true
+      })
+      const merged = mergeGraphDelta(
+        new Map(graphPersons.map((person) => [person.id, person])),
+        graphRelationships,
+        delta
+      )
       setGraphPersons([...merged.personsMap.values()])
       setGraphRelationships(merged.relationships)
       setGraphDepth(delta.maxDepth)
@@ -208,6 +231,7 @@ export default function MembersViews({
               truncated={isTruncated}
               isLoadingMore={isLoadingMore}
               onLoadMore={loadMore}
+              onLoadAll={loadAll}
             />
           )}
           {currentView === 'mindmap' && (
@@ -219,6 +243,7 @@ export default function MembersViews({
               truncated={isTruncated}
               isLoadingMore={isLoadingMore}
               onLoadMore={loadMore}
+              onLoadAll={loadAll}
             />
           )}
           {currentView === 'bubble' && (

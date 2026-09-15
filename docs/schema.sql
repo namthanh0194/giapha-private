@@ -3847,8 +3847,8 @@ declare
   person_limit constant integer := 2000;
   relationship_limit constant integer := 6000;
 begin
-  if max_depth not between 1 and 10 then
-    raise exception 'max_depth must be between 1 and 10';
+  if max_depth not between 1 and 20 then
+    raise exception 'max_depth must be between 1 and 20';
   end if;
 
   if root_id is null or not public.can_view_person(root_id) then

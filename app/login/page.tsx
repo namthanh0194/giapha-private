@@ -30,6 +30,7 @@ export default function LoginPage() {
   const [ssoError, setSsoError] = useState(false)
   // Fail closed: SSO is hidden until the deployment explicitly enables it.
   const ssoDisabled = process.env.NEXT_PUBLIC_DISABLE_SSO !== 'false'
+  const enableFacebook = process.env.NEXT_PUBLIC_ENABLE_FACEBOOK_SSO === 'true'
 
   const handleOAuthLogin = async (provider: 'google' | 'facebook') => {
     if (isDemo) {
@@ -349,7 +350,7 @@ export default function LoginPage() {
                     <div className='grow border-t border-stone-200'></div>
                   </div>
 
-                  <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                  <div className={enableFacebook ? 'grid grid-cols-1 gap-3 sm:grid-cols-2' : 'flex'}>
                     <button
                       type='button'
                       disabled={loading}
@@ -379,6 +380,7 @@ export default function LoginPage() {
                       Google
                     </button>
 
+                    {enableFacebook && (
                     <button
                       type='button'
                       disabled={loading}
@@ -395,6 +397,7 @@ export default function LoginPage() {
                       </svg>
                       Facebook
                     </button>
+                    )}
                   </div>
                 </>
               )}

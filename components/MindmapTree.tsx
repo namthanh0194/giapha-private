@@ -19,6 +19,7 @@ interface MindmapTreeProps {
   truncated?: boolean
   isLoadingMore?: boolean
   onLoadMore?: () => void
+  onLoadAll?: () => void
 }
 
 export default function MindmapTree({
@@ -28,7 +29,8 @@ export default function MindmapTree({
   canEdit,
   truncated = false,
   isLoadingMore = false,
-  onLoadMore
+  onLoadMore,
+  onLoadAll
 }: MindmapTreeProps) {
   const { showAvatar, setMemberModalId } = useMemberListView()
   const [hideDaughtersInLaw, setHideDaughtersInLaw] = useState(false)
@@ -94,11 +96,18 @@ export default function MindmapTree({
 
   return (
     <div className='relative flex h-full min-h-[calc(100vh-140px)] w-full justify-start overflow-x-auto p-4 sm:p-6 lg:justify-center lg:p-8'>
-      {truncated && onLoadMore && (
-        <div className='absolute top-4 right-4 z-30 rounded-xl border border-stone-200 bg-white p-2'>
-          <button type='button' className='rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-wait disabled:opacity-60' disabled={isLoadingMore} onClick={onLoadMore}>
-            {isLoadingMore ? 'Đang tải...' : 'Tải thêm thế hệ'}
-          </button>
+      {truncated && (onLoadMore || onLoadAll) && (
+        <div className='absolute top-4 right-4 z-30 flex gap-2 rounded-xl border border-stone-200 bg-white p-2'>
+          {onLoadMore && (
+            <button type='button' className='rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-wait disabled:opacity-60' disabled={isLoadingMore} onClick={onLoadMore}>
+              {isLoadingMore ? 'Đang tải...' : 'Tải thêm thế hệ'}
+            </button>
+          )}
+          {onLoadAll && (
+            <button type='button' className='rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:cursor-wait disabled:opacity-60' disabled={isLoadingMore} onClick={onLoadAll}>
+              Hiện tất cả thế hệ
+            </button>
+          )}
         </div>
       )}
       <MindmapToolbar

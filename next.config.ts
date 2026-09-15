@@ -5,6 +5,10 @@ const isDevelopment = process.env.NODE_ENV === 'development'
 
 const nextConfig: NextConfig = {
   output: process.env.BUILD_STANDALONE === '1' ? 'standalone' : undefined,
+  outputFileTracingIncludes: {
+    '/dashboard/upgrade': ['./supabase/migrations/**/*'],
+    '/actions/migrations': ['./supabase/migrations/**/*']
+  },
   async headers() {
     return [
       {

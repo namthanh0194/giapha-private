@@ -52,7 +52,7 @@ select is(jsonb_array_length(public.get_family_subtree('f1000000-0000-4000-8000-
 select is(jsonb_array_length(public.get_family_subtree('f1000000-0000-4000-8000-000000000999', 1, true) -> 'persons'), 0, 'missing subtree root returns empty graph');
 select is(jsonb_array_length(public.get_person_neighborhood('f1000000-0000-4000-8000-000000000004', 1, 1) -> 'persons'), 3, 'neighborhood includes parent and child');
 select ok(exists (select 1 from jsonb_array_elements(public.get_person_neighborhood('f1000000-0000-4000-8000-000000000004', 1, 1) -> 'relationships') edge where edge ->> 'person_a' = 'f1000000-0000-4000-8000-000000000001'), 'neighborhood keeps parent edge');
-select throws_like($$select public.get_family_subtree('f1000000-0000-4000-8000-000000000001', 0, true)$$, '%max_depth must be between 1 and 10%', 'subtree rejects invalid depth');
+select throws_like($$select public.get_family_subtree('f1000000-0000-4000-8000-000000000001', 0, true)$$, '%max_depth must be between 1 and 20%', 'subtree rejects invalid depth');
 select throws_like($$select public.get_person_neighborhood('f1000000-0000-4000-8000-000000000004', 11, 1)$$, '%depth must be between 1 and 10%', 'neighborhood rejects invalid depth');
 select throws_like($$insert into public.relationships (type, person_a, person_b) values ('biological_child', 'f1000000-0000-4000-8000-000000000007', 'f1000000-0000-4000-8000-000000000001')$$, '%cycle%', 'Phase 1 relationship rules reject cycles before traversal');
 

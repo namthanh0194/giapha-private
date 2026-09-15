@@ -24,8 +24,10 @@ describe('family graph utilities', () => {
   it('calls bounded RPCs with the expected argument names', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: { persons: [], relationships: [], truncated: false, maxDepth: 2 }, error: null })
     await fetchFamilySubtree({ rpc } as never, { rootId: 'root', maxDepth: 2, includeSpouses: true })
+    await fetchFamilySubtree({ rpc } as never, { rootId: 'root', maxDepth: 25, includeSpouses: true })
     await fetchPersonNeighborhood({ rpc } as never, { personId: 'person', ancestorDepth: 1, descendantDepth: 2 })
     expect(rpc).toHaveBeenNthCalledWith(1, 'get_family_subtree', { root_id: 'root', max_depth: 2, include_spouses: true })
-    expect(rpc).toHaveBeenNthCalledWith(2, 'get_person_neighborhood', { person_id: 'person', ancestor_depth: 1, descendant_depth: 2 })
+    expect(rpc).toHaveBeenNthCalledWith(2, 'get_family_subtree', { root_id: 'root', max_depth: 20, include_spouses: true })
+    expect(rpc).toHaveBeenNthCalledWith(3, 'get_person_neighborhood', { person_id: 'person', ancestor_depth: 1, descendant_depth: 2 })
   })
 })

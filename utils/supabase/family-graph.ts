@@ -2,6 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Person, Relationship } from '@/types'
 import { withTelemetry } from '@/utils/telemetry'
 
+export const FAMILY_TREE_MAX_DEPTH = 20
+
 export interface FamilyGraph {
   persons: Person[]
   relationships: Relationship[]
@@ -29,7 +31,7 @@ export async function fetchFamilySubtree(
   return await withTelemetry('graph.family_subtree', { route: '/dashboard/members', roleClass: 'member' }, async (scope) => {
   const { data, error } = await supabase.rpc('get_family_subtree', {
     root_id: input.rootId,
-    max_depth: Math.min(10, Math.max(1, input.maxDepth)),
+    max_depth: Math.min(FAMILY_TREE_MAX_DEPTH, Math.max(1, input.maxDepth)),
     include_spouses: input.includeSpouses
   })
   if (error) throw error

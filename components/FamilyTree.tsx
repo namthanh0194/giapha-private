@@ -20,7 +20,8 @@ export default function FamilyTree({
   canEdit,
   truncated = false,
   isLoadingMore = false,
-  onLoadMore
+  onLoadMore,
+  onLoadAll
 }: {
   personsMap: Map<string, Person>
   relationships: Relationship[]
@@ -29,6 +30,7 @@ export default function FamilyTree({
   truncated?: boolean
   isLoadingMore?: boolean
   onLoadMore?: () => void
+  onLoadAll?: () => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [hideDaughtersInLaw, setHideDaughtersInLaw] = useState(false)
@@ -324,11 +326,18 @@ export default function FamilyTree({
         canEdit={canEdit}
       />
 
-      {truncated && onLoadMore && (
-        <div className='absolute top-4 right-4 z-30 rounded-xl border border-stone-200 bg-white p-2'>
-          <button type='button' className='rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-wait disabled:opacity-60' disabled={isLoadingMore} onClick={onLoadMore}>
-            {isLoadingMore ? 'Đang tải...' : 'Tải thêm thế hệ'}
-          </button>
+      {truncated && (onLoadMore || onLoadAll) && (
+        <div className='absolute top-4 right-4 z-30 flex gap-2 rounded-xl border border-stone-200 bg-white p-2'>
+          {onLoadMore && (
+            <button type='button' className='rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-wait disabled:opacity-60' disabled={isLoadingMore} onClick={onLoadMore}>
+              {isLoadingMore ? 'Đang tải...' : 'Tải thêm thế hệ'}
+            </button>
+          )}
+          {onLoadAll && (
+            <button type='button' className='rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:cursor-wait disabled:opacity-60' disabled={isLoadingMore} onClick={onLoadAll}>
+              Hiện tất cả thế hệ
+            </button>
+          )}
         </div>
       )}
 

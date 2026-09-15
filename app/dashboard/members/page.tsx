@@ -92,7 +92,7 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
   const treeData = targetRootId
     ? await fetchFamilySubtree(supabase, {
         rootId: targetRootId,
-        maxDepth: 3,
+        maxDepth: 20,
         includeSpouses: true
       })
     : { persons: [], relationships: [], truncated: false, maxDepth: 1 }
